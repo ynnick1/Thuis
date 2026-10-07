@@ -220,7 +220,55 @@ function tijdTekst(k){ return k.vast ? duur(reken(k)) + ' (jouw tijd)' : 'jij ' 
 function uur(ts){ const d = new Date(ts); return d.getHours() + 'u' + String(d.getMinutes()).padStart(2,'0'); }
 function zoneNaam(z){ if (z === 'winkel') return 'Winkel'; return z && ZONES[z] ? ZONES[z].naam : 'Nog geen plek'; }
 function soortVan(k){ return k.soort || 'klus'; }
-function openAlle(){ return S.klussen.filter(k => k.status === 'open'); }
+/* prioriteit en herhaling */
+const PRIO = [['hoog','Belangrijk'],['gewoon','Gewoon'],['laag','Mag wachten']];
+const HERHAAL_CYCLUS = [null, {n:1,eenheid:'dag'}, {n:1,eenheid:'week'}, {n:2,eenheid:'week'}, {n:1,eenheid:'maand'}];
+const PRIO_GEWICHT = { hoog:2, gewoon:1, laag:0 };
+function prioVan(k){ return k.prio || 'gewoon'; }
+function sindsVan(k){ return k.wakker || k.gemaakt || 0; }
+function volgorde(a, b){ return (PRIO_GEWICHT[prioVan(b)] - PRIO_GEWICHT[prioVan(a)]) || (sindsVan(a) - sindsVan(b)); }
+function openAlle(){ return S.klussen.filter(k => k.status === 'open').sort(volgorde); }
+const EENHEDEN = { dag:['dag','dagen'], week:['week','weken'], maand:['maand','maanden'] };
+function herhaalTekst(h){
+  if (!h) return '';
+  if (h.eenheid === 'maand' && h.n === 12) return 'elk jaar';
+  if (h.n === 1) return h.eenheid === 'dag' ? 'elke dag' : h.eenheid === 'week' ? 'elke week' : 'elke maand';
+  if (h.eenheid === 'week' && h.n === 2) return 'om de 2 weken';
+  return 'om de ' + h.n + ' ' + EENHEDEN[h.eenheid][1];
+}
+function middernacht(ts){ const d = new Date(ts); d.setHours(0,0,0,0); return d; }
+function volgendeNa(ts, h){
+  const d = middernacht(ts);
+  if (h.eenheid === 'dag') d.setDate(d.getDate() + h.n);
+  else if (h.eenheid === 'week') d.setDate(d.getDate() + 7 * h.n);
+  else { const dag = d.getDate(); d.setDate(1); d.setMonth(d.getMonth() + h.n); const max = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); d.setDate(Math.min(dag, max)); }
+  return d.getTime();
+}
+function slaapIn(k, actie){
+  k.status = 'slaapt'; k.afgerond = nu(); k.laatsteActie = actie; k.vorigWakker = sindsVan(k); k.wakker = null;
+  k.volgende = volgendeNa(nu(), k.herhaal);
+}
+function markeerGedaan(k){
+  if (k.herhaal) { k.log = (k.log || []).concat(nu()).slice(-60); k.laatst = nu(); slaapIn(k, 'gedaan'); }
+  else { k.status = 'gedaan'; k.afgerond = nu(); }
+}
+function heropenKlus(k){
+  if (k.status === 'slaapt' && k.laatsteActie === 'gedaan' && k.log && k.log.length) { k.log.pop(); k.laatst = k.log[k.log.length - 1] || null; }
+  if (k.herhaal) k.wakker = (k.status === 'slaapt' && k.vorigWakker) || nu();
+  k.status = 'open'; k.afgerond = null; k.volgende = null; k.laatsteActie = null; k.vorigWakker = null;
+}
+function wekOp(){
+  let wijziging = false;
+  S.klussen.forEach(k => { if (k.status === 'slaapt' && k.volgende && k.volgende <= nu()) { k.status = 'open'; k.wakker = k.volgende; k.volgende = null; k.afgerond = null; k.laatsteActie = null; wijziging = true; } });
+  if (wijziging) bewaar();
+}
+function zetHerhaal(k, h){
+  k.herhaal = h || null;
+  if (k.status !== 'slaapt') return;
+  if (!h) { k.status = 'gedaan'; k.afgerond = k.laatst || nu(); k.volgende = null; return; }
+  k.volgende = volgendeNa(k.laatst || k.afgerond || nu(), h);
+}
+function slapers(){ return S.klussen.filter(k => k.status === 'slaapt').sort((a, b) => a.volgende - b.volgende); }
 function open(){ return openAlle().filter(k => soortVan(k) === 'klus'); }
 function snelle(){ return openAlle().filter(k => soortVan(k) === 'snel'); }
 function ooitjes(){ return openAlle().filter(k => soortVan(k) === 'ooit'); }
@@ -229,6 +277,7 @@ function vind(id){ return S.klussen.find(k => k.id === id); }
 function isWeekend(){ const d = new Date().getDay(); return d === 0 || d === 6; }
 function datum(ts){ return new Date(ts).toLocaleDateString('nl-BE', {day:'numeric', month:'long'}); }
 const ICON = {
+  herhaal:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg>',
   mic:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
   klok:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
   zon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
@@ -347,9 +396,30 @@ function herken(tekst){
   else if ((m = s.match(/(\d+)\s*(u|uur|uren)\b/))) r.gok = Number(m[1]) * 60;
   else if (/half uur|halfuur/.test(s)) r.gok = 30;
   else if (/kwartier/.test(s)) r.gok = 15;
+  r.herhaal = herkenHerhaal(s);
+  r.prio = herkenPrio(s);
   return r;
 }
-function netteTekst(t){ t = t.replace(/,?\s*\b(\d+\s*(minuutjes|minuten|minuut|min|uren|uur|u)|een kwartier|kwartier|een half uur|half uur|halfuur)\b/gi, '').trim().replace(/\s+/g, ' ').replace(/[.,;]+$/, ''); return t.charAt(0).toUpperCase() + t.slice(1); }
+const GETAL = { een:1, twee:2, drie:3, vier:4, vijf:5, zes:6, zeven:7, acht:8, negen:9, tien:10, twaalf:12, veertien:14 };
+function eenheidVan(w){ return /^dag/.test(w) ? 'dag' : /^we/.test(w) ? 'week' : /^maand/.test(w) ? 'maand' : 'jaar'; }
+function maakHerhaal(n, e){ return e === 'jaar' ? { n:12 * n, eenheid:'maand' } : { n, eenheid:e }; }
+const HERHAAL_RE = /\b(?:(?:elke|iedere|om de|alle)\s+(\d+|een|twee|drie|vier|vijf|zes|zeven|acht|negen|tien|twaalf|veertien)\s+(dagen|dag|weken|week|maanden|maand|jaar)|(?:elke|iedere|om de|elk|ieder)\s+(dag|week|maand|jaar)|(dagelijks|wekelijks|tweewekelijks|maandelijks|jaarlijks)|(\d+|een|twee|drie|vier)\s*(?:keer|x)\s+per\s+(week|maand|jaar))\b/;
+function herkenHerhaal(s){
+  const m = s.match(HERHAAL_RE); if (!m) return null;
+  if (m[1]) { const n = GETAL[m[1]] || Number(m[1]); return n > 0 ? maakHerhaal(n, eenheidVan(m[2])) : null; }
+  if (m[3]) return maakHerhaal(1, eenheidVan(m[3]));
+  if (m[4]) return { dagelijks:{n:1,eenheid:'dag'}, wekelijks:{n:1,eenheid:'week'}, tweewekelijks:{n:2,eenheid:'week'}, maandelijks:{n:1,eenheid:'maand'}, jaarlijks:{n:12,eenheid:'maand'} }[m[4]];
+  if (m[5]) { const x = GETAL[m[5]] || Number(m[5]); const e = m[6];
+    if (x <= 1) return maakHerhaal(1, e);
+    if (e === 'week') return { n:Math.max(1, Math.round(7 / x)), eenheid:'dag' };
+    if (e === 'maand') return x >= 4 ? { n:Math.max(1, Math.round(4 / x)), eenheid:'week' } : { n:Math.max(1, Math.round(30 / x)), eenheid:'dag' };
+    return { n:Math.max(1, Math.round(12 / x)), eenheid:'maand' }; }
+  return null;
+}
+const LAAG_RE = /\b(mag wachten|geen haast|niet dringend|niet belangrijk|als ik tijd heb|heeft tijd|kan wachten)\b/;
+const HOOG_RE = /\b(belangrijk|dringend|prioriteit|voorrang|niet vergeten)\b/;
+function herkenPrio(s){ if (LAAG_RE.test(s)) return 'laag'; if (HOOG_RE.test(s)) return 'hoog'; return null; }
+function netteTekst(t){ t = t.replace(new RegExp(HERHAAL_RE.source, 'gi'), '').replace(new RegExp(LAAG_RE.source, 'gi'), '').replace(new RegExp(HOOG_RE.source, 'gi'), '').replace(/,\s*,/g, ','); t = t.replace(/,?\s*\b(\d+\s*(minuutjes|minuten|minuut|min|uren|uur|u)|een kwartier|kwartier|een half uur|half uur|halfuur)\b/gi, '').trim().replace(/\s+/g, ' ').replace(/\s+,/g, ',').replace(/[.,;\s]+$/, '').replace(/^[,;\s]+/, ''); return t.charAt(0).toUpperCase() + t.slice(1); }
 
 /* ---------- navigatie ---------- */
 let stapel = [];
@@ -406,7 +476,7 @@ function stopLuisteren(){ if (herkenner && luistert) { try { herkenner.stop(); }
 const SOORTEN = [['klus','Klus'],['snel','Even snel'],['ooit','Ooit'],['kopen','Alleen kopen']];
 const VASTE_SOORT = { winkel:'kopen', snel:'snel', ooit:'ooit' };
 let concept = { tekst:'', weg:{}, zone:null, soort:null };
-function nieuwConcept(zone){ const v = VASTE_SOORT[zone]; concept = { tekst:'', weg:{}, zone: v ? null : (zone || null), soort: v || null }; }
+function nieuwConcept(zone){ const v = VASTE_SOORT[zone]; concept = { tekst:'', weg:{}, zone: v ? null : (zone || null), soort: v || null, herhaal:undefined, prio:undefined }; }
 function soortAuto(){
   const t = ' ' + concept.tekst.toLowerCase() + ' ';
   if (/\b(ooit|later eens|op termijn|volgend jaar)\b/.test(t)) return 'ooit';
@@ -425,6 +495,8 @@ function conceptKlus(){
   if (concept.weg.droog) r.droog = false;
   if (concept.weg.ayke) r.ayke = false;
   if (concept.weg.weekend) r.weekend = false;
+  if (concept.herhaal !== undefined) r.herhaal = concept.herhaal;
+  if (concept.prio !== undefined) r.prio = concept.prio;
   return r;
 }
 
@@ -447,7 +519,7 @@ function stelSetSamen(){
   const buitenEerst = dn === true;
   kandidaten.sort((a, b) => {
     const ab = buitenEerst ? (ZONES[b.k.zone]?.buiten ? 1 : 0) - (ZONES[a.k.zone]?.buiten ? 1 : 0) : 0;
-    return ab || a.k.gemaakt - b.k.gemaakt;
+    return (PRIO_GEWICHT[prioVan(b.k)] - PRIO_GEWICHT[prioVan(a.k)]) || ab || (sindsVan(a.k) - sindsVan(b.k));
   });
   if (kandidaten.length > 1 && setVariant) { const n = setVariant % kandidaten.length; kandidaten.push(...kandidaten.splice(0, n)); }
   let rest = blok, gekozen = [], winkel = null;
@@ -464,7 +536,8 @@ function stelSetSamen(){
     } else pastNiet.push({ tekst:c.k.tekst, reden:'past niet meer in je blok' });
   }
   if (!winkel && teKopen.length && winkelTijd <= rest) { winkel = { type:'winkel', materialen:teKopen, tijd:winkelTijd }; rest -= winkelTijd; }
-  gekozen.sort((a, b) => ROUTE.indexOf(a.zone) - ROUTE.indexOf(b.zone));
+  const eerst = it => (vind(it.id) && prioVan(vind(it.id)) === 'hoog') ? 0 : 1;
+  gekozen.sort((a, b) => (eerst(a) - eerst(b)) || (ROUTE.indexOf(a.zone) - ROUTE.indexOf(b.zone)));
   if (winkel) gekozen.unshift(Object.assign(winkel, { zone:'winkel' }));
   if (rondje) gekozen.unshift(rondje);
   return { items:gekozen, totaal:blok - rest, rest, pastNiet };
@@ -472,6 +545,7 @@ function stelSetSamen(){
 
 /* ---------- tekenen ---------- */
 function teken(){
+  wekOp();
   const [r, a] = route();
   const app = $('#app');
   $('#laag').innerHTML = '';
@@ -538,22 +612,35 @@ function tekenKaart(app){
   </div></div>`;
 }
 
+function prioWoord(k){ return prioVan(k) === 'hoog' ? 'belangrijk · ' : prioVan(k) === 'laag' ? 'mag wachten · ' : ''; }
+function herhaalWoord(k){
+  if (!k.herhaal) return '';
+  const dagen = k.wakker ? Math.floor((middernacht(nu()) - middernacht(k.wakker)) / 864e5) : 0;
+  return ' · ' + herhaalTekst(k.herhaal) + (dagen >= 1 ? ', ' + (dagen === 1 ? '1 dag' : dagen + ' dagen') + ' over tijd' : '');
+}
 function statusRegel(k){
-  if (soortVan(k) === 'snel') return 'even snel' + (k.zone ? ' · ' + zoneNaam(k.zone) : '');
+  if (k.status === 'slaapt') return herhaalTekst(k.herhaal) + ' · komt terug op ' + datum(k.volgende);
+  if (soortVan(k) === 'snel') return prioWoord(k) + 'even snel' + (k.zone ? ' · ' + zoneNaam(k.zone) : '') + herhaalWoord(k);
   if (soortVan(k) === 'ooit') return 'ooit' + (k.zone ? ' · ' + zoneNaam(k.zone) : '') + ' · sinds ' + datum(k.gemaakt);
   const r = wachtReden(k);
-  return (r ? r : 'kan nu') + ' · ' + tijdTekst(k);
+  return prioWoord(k) + (r ? r : 'kan nu') + ' · ' + tijdTekst(k) + herhaalWoord(k);
 }
+function naamHtml(k){ return (prioVan(k) === 'hoog' && k.status === 'open' && soortVan(k) !== 'ooit' ? '<i class="pr" aria-hidden="true">!</i>' : '') + esc(k.tekst); }
 function knopRij(k, kol){
   const ooit = soortVan(k) === 'ooit';
   return `<div class="rijklus ${kol ? 'kol' : ''}">
-    <button type="button" class="klusnaam" data-doe="ga" data-h="#klus/${k.id}"><b>${esc(k.tekst)}</b><span>${esc(statusRegel(k))}</span></button>
-    <span class="knoppen">${ooit ? `<button type="button" class="chip aan" data-doe="oppakken" data-id="${k.id}" aria-label="Nu oppakken: ${esc(k.tekst)}">Nu oppakken</button>` : `<button type="button" class="chip aan" data-doe="gedaan" data-id="${k.id}" aria-label="Gedaan: ${esc(k.tekst)}">Gedaan</button>`}<button type="button" class="chip uit" data-doe="los" data-id="${k.id}" aria-label="Laat los: ${esc(k.tekst)}">Laat los</button></span></div>`;
+    <button type="button" class="klusnaam" data-doe="ga" data-h="#klus/${k.id}"><b>${naamHtml(k)}</b><span>${esc(statusRegel(k))}</span></button>
+    <span class="knoppen">${ooit ? `<button type="button" class="chip aan" data-doe="oppakken" data-id="${k.id}" aria-label="Nu oppakken: ${esc(k.tekst)}">Nu oppakken</button>` : `<button type="button" class="chip aan" data-doe="gedaan" data-id="${k.id}" aria-label="Gedaan: ${esc(k.tekst)}">Gedaan</button>`}${k.herhaal && !ooit ? `<button type="button" class="chip uit" data-doe="overslaan" data-id="${k.id}" aria-label="Deze keer overslaan: ${esc(k.tekst)}">Sla over</button>` : `<button type="button" class="chip uit" data-doe="los" data-id="${k.id}" aria-label="Laat los: ${esc(k.tekst)}">Laat los</button>`}</span></div>`;
 }
 function klusItem(k){
   const r = wachtReden(k);
   return `<button type="button" class="item" data-doe="ga" data-h="#klus/${k.id}">
     <span class="st ${r ? 'wacht' : 'kan'}">${r ? ICON.slot : ''}</span>
+    <span class="t"><b>${naamHtml(k)}</b><span>${esc(statusRegel(k))}</span></span></button>`;
+}
+function slaperItem(k){
+  return `<button type="button" class="item" data-doe="ga" data-h="#klus/${k.id}">
+    <span class="st wacht">${ICON.herhaal}</span>
     <span class="t"><b>${esc(k.tekst)}</b><span>${esc(statusRegel(k))}</span></span></button>`;
 }
 function tekenPaneel(z){
@@ -570,8 +657,9 @@ function tekenPaneel(z){
       <button type="button" class="chip aan" data-doe="gekocht" data-m="${esc(m)}">Gekocht</button></div>`).join('');
     inhoud = invoer + (los.length || keys.length ? losHtml + klusHtml : '<p class="stil">Niets te kopen.</p>');
   } else if (z === 'snel') {
-    const ks = snelle(); titel = 'Even snel'; n = ks.length; eenheid = 'ding';
+    const ks = snelle(), sl = slapers().filter(k => soortVan(k) === 'snel'); titel = 'Even snel'; n = ks.length; eenheid = 'ding';
     inhoud = (ks.length ? `<div>${ks.map(k => knopRij(k)).join('')}</div>` : '<p class="stil">Geen kleine dingen.</p>') +
+      (sl.length ? `<details style="background:var(--vlak2)"><summary>Komt vanzelf terug · ${sl.length}</summary><div class="lijst" style="margin-top:8px">${sl.map(slaperItem).join('')}</div></details>` : '') +
       '<p class="stil klein" style="margin:0">Deze springen nooit vanzelf naar voren. Bij Ik heb tijd worden ze samen een klein rondje van 10 minuten, als opwarmer vooraan in je set.</p>' + toevoegen('snel', 'Iets kleins toevoegen');
   } else if (z === 'ooit') {
     const ks = ooitjes(); titel = 'Ooit'; n = ks.length; eenheid = 'ding';
@@ -582,9 +670,10 @@ function tekenPaneel(z){
     titel = 'Nog te plaatsen'; n = ks.length;
     inhoud = ks.length ? ks.map(klusItem).join('') + '<p class="stil klein">Tik op een klus en kies een plek.</p>' : '<p class="stil">Alles heeft een plek.</p>';
   } else {
-    const ks = open().filter(k => k.zone === z), oh = ooitjes().filter(k => k.zone === z);
+    const ks = open().filter(k => k.zone === z), oh = ooitjes().filter(k => k.zone === z), sl = slapers().filter(k => k.zone === z);
     titel = zoneNaam(z); n = ks.length;
     inhoud = (ks.length ? ks.map(klusItem).join('') : '<p class="stil">Hier ligt niets.</p>') +
+      (sl.length ? `<details style="background:var(--vlak2)"><summary>Komt vanzelf terug · ${sl.length}</summary><div class="lijst" style="margin-top:8px">${sl.map(slaperItem).join('')}</div></details>` : '') +
       (oh.length ? `<details style="background:var(--vlak2)"><summary>Ooit hier · ${oh.length}</summary>${oh.map(k => knopRij(k, true)).join('')}</details>` : '') +
       toevoegen(z, 'Iets toevoegen aan ' + titel);
   }
@@ -608,7 +697,7 @@ function tekenGooi(app, zone){
     <div class="stack" style="gap:6px"><label class="label" for="vang">Wat zit er in je hoofd?</label>
       <textarea id="vang" data-in="tekst" placeholder="bv. tuinhuis, deur hangt scheef, scharnieren kapot">${esc(concept.tekst)}</textarea></div>
     <div class="stack" style="gap:8px"><div class="label">Wat ik erop lees</div><div id="chips" class="stack" style="gap:10px"></div>
-      <div class="stil klein">Klopt iets niet? Tik op het kruisje. Je hoeft niets in te vullen.</div></div>
+      <div class="stil klein">Klopt iets niet? Tik op het kruisje. Herhaling en prioriteit wissel je door erop te tikken. Je hoeft niets in te vullen.</div></div>
     <button type="button" class="knop hoofd" data-doe="bewaar">Bewaar</button>
     ${bakje.length ? `<div class="kaartje"><div class="label">Nog te plaatsen · ${bakje.length}</div><div class="lijst" style="margin-top:8px">${bakje.map(klusItem).join('')}</div></div>` : ''}
   </div>`;
@@ -640,6 +729,11 @@ function tekenChips(){
       c.push(['', 'jij ' + gokTekst(r.gok || 5), 'uit']);
     }
     det = c.map(([k, t, cls]) => k ? `<button type="button" class="chip ${cls}" data-doe="weg" data-k="${k}" aria-label="${k} verwijderen">${t} <span aria-hidden="true">×</span></button>` : `<span class="chip ${cls}">${t}</span>`).join('');
+    if (soort === 'klus' || soort === 'snel') {
+      const p = r.prio || 'gewoon';
+      det += `<button type="button" class="chip ${r.herhaal ? 'aan' : 'uit'}" data-doe="cyclusherhaal" aria-label="Herhaling wijzigen, nu: ${r.herhaal ? herhaalTekst(r.herhaal) : 'eenmalig'}">${ICON.herhaal}${r.herhaal ? esc(herhaalTekst(r.herhaal)) : 'eenmalig'}</button>`;
+      det += `<button type="button" class="chip ${p === 'hoog' ? 'prio-hoog' : p === 'laag' ? 'aan' : 'uit'}" data-doe="cyclusprio" aria-label="Prioriteit wijzigen, nu: ${PRIO.find(x => x[0] === p)[1]}">${p === 'hoog' ? '<i class="pr">!</i>' : ''}${PRIO.find(x => x[0] === p)[1].toLowerCase()}</button>`;
+    }
   }
   el.innerHTML = rij + (det ? `<div class="chips">${det}</div>` : '');
 }
@@ -651,7 +745,18 @@ function tekenKlus(app, id){
   const andere = open().filter(o => o.id !== k.id);
   const opties = ['<option value="">Nog geen plek</option>'].concat(Object.keys(ZONES).map(z => `<option value="${z}" ${k.zone === z ? 'selected' : ''}>${esc(ZONES[z].naam)}</option>`)).join('');
   const toggle = (veld, tekst, zon) => `<button type="button" class="chip ${k[veld] ? 'aan' : 'uit'} ${zon && k[veld] ? 'zon' : ''}" aria-pressed="${!!k[veld]}" data-doe="toggle" data-v="${veld}">${tekst}</button>`;
-  const status = k.status === 'open' ? statusRegel(k) : (k.status === 'gedaan' ? 'gedaan op ' + datum(k.afgerond) : 'losgelaten op ' + datum(k.afgerond));
+  const status = k.status === 'open' || k.status === 'slaapt' ? statusRegel(k) : (k.status === 'gedaan' ? 'gedaan op ' + datum(k.afgerond) : 'losgelaten op ' + datum(k.afgerond));
+  const h = k.herhaal;
+  const hOpties = [['', 'Niet herhalen'], ...['dag', 'week', 'maand'].map(v => [v, EENHEDEN[v][h && h.n === 1 ? 0 : 1]])].map(([v, t]) => `<option value="${v}" ${(h ? h.eenheid : '') === v ? 'selected' : ''}>${t}</option>`).join('');
+  const hInfo = h ? [k.status === 'slaapt' ? 'Komt terug op ' + datum(k.volgende) + '.' : 'Staat nu klaar.', k.laatst ? 'Laatst gedaan op ' + datum(k.laatst) + '.' : '', 'De teller start opnieuw wanneer je afvinkt.'].filter(Boolean).join(' ') : 'Eenmalig. Kies een ritme om het vanzelf te laten terugkomen.';
+  const ritme = soort === 'ooit' ? '' : `
+    <div class="kaartje" style="margin:0"><div class="label">Prioriteit</div>
+      <div class="seg3" role="group" aria-label="Prioriteit" style="margin-top:8px">${PRIO.map(([p, t]) => `<button type="button" class="${p}" aria-pressed="${prioVan(k) === p}" data-doe="prio" data-p="${p}">${t}</button>`).join('')}</div>
+      <div class="stil klein" style="margin-top:6px">Bij Ik heb tijd gaan belangrijke klussen eerst, mag-wachten als laatste.</div></div>
+    <div class="kaartje" style="margin:0"><label class="label" for="f-h-e">Herhaal</label>
+      <div class="rij" style="margin-top:6px">${h ? `<span>elke</span><input id="f-h-n" inputmode="numeric" data-in="f-h-n" value="${h.n}" style="width:62px;background:var(--vlak2);font-size:15px;padding:10px;text-align:center" aria-label="Aantal">` : ''}
+        <select id="f-h-e" data-in="f-h-e" style="background:var(--vlak2);font-size:15px;padding:10px">${hOpties}</select></div>
+      <div class="stil klein" style="margin-top:6px">${esc(hInfo)}</div></div>`;
   const soortRij = `<div class="soorten" role="group" aria-label="Soort">${SOORTEN.filter(([sl]) => sl !== 'kopen').map(([sl, t]) => `<button type="button" class="chip ${soort === sl ? 'aan' : 'uit'}" aria-pressed="${soort === sl}" data-doe="fichesoort" data-s="${sl}">${t}</button>`).join('')}</div>`;
   const plek = `<div class="kaartje" style="margin:0"><label class="label" for="f-zone">Plek</label>
         <select id="f-zone" data-in="f-zone" style="margin-top:6px;background:var(--vlak2);font-size:15px;padding:10px">${opties}</select></div>`;
@@ -671,10 +776,13 @@ function tekenKlus(app, id){
     <details ${k.wachtOp ? 'open' : ''}><summary>Meer</summary>
       <label class="label" for="f-wacht" style="display:block;margin-top:10px">Wacht op een andere klus</label>
       <select id="f-wacht" data-in="f-wacht" style="margin-top:6px;background:var(--vlak2);font-size:15px;padding:10px"><option value="">Nee</option>${andere.map(o => `<option value="${o.id}" ${k.wachtOp === o.id ? 'selected' : ''}>${esc(o.tekst)}</option>`).join('')}</select></details>`;
-  const knoppen = k.status !== 'open' ? `<button type="button" class="knop rand klein" data-doe="heropen" data-id="${k.id}">Toch nog niet klaar</button>` :
+  const knoppen = k.status === 'slaapt' ? `<button type="button" class="knop rand klein" data-doe="wekNu" data-id="${k.id}">Zet nu al terug</button>
+    <button type="button" class="linkknop" data-doe="los" data-id="${k.id}">Stop met herhalen</button>` :
+    k.status !== 'open' ? `<button type="button" class="knop rand klein" data-doe="heropen" data-id="${k.id}">Toch nog niet klaar</button>` :
     (soort === 'ooit' ? `<button type="button" class="knop hoofd klein" data-doe="oppakken" data-id="${k.id}">Nu oppakken</button>` : `<button type="button" class="knop hoofd klein" data-doe="gedaan" data-id="${k.id}">Gedaan</button>`) +
-    `<button type="button" class="knop rand klein" data-doe="los" data-id="${k.id}">Laat los</button>
-    <div class="stil klein" style="text-align:center">Geen bevestiging nodig: je kunt het 5 seconden ongedaan maken.</div>`;
+    (h && soort !== 'ooit' ? `<button type="button" class="knop rand klein" data-doe="overslaan" data-id="${k.id}">Sla deze keer over</button>
+    <button type="button" class="linkknop" data-doe="los" data-id="${k.id}">Stop met herhalen</button>` : `<button type="button" class="knop rand klein" data-doe="los" data-id="${k.id}">Laat los</button>`) +
+    `<div class="stil klein" style="text-align:center">Geen bevestiging nodig: je kunt het 5 seconden ongedaan maken.</div>`;
   app.innerHTML = `
   <button type="button" class="terug" data-doe="terug">${ICON.terug}Terug</button>
   <div class="stack">
@@ -682,6 +790,7 @@ function tekenKlus(app, id){
       <textarea id="f-tekst" data-in="f-tekst" rows="2" style="min-height:0;font-family:var(--titel);font-weight:700;font-size:21px;line-height:1.25">${esc(k.tekst)}</textarea></div>
     <div class="stil klein" style="margin-top:-6px">${esc(status)}</div>
     ${soortRij}
+    ${ritme}
     ${klusDelen}
     <div class="stil klein">Erin gegooid op ${datum(k.gemaakt)}.</div>
     ${knoppen}
@@ -734,7 +843,7 @@ function tekenSet(app){
     <div class="label" style="color:var(--stil2)">${esc(itemZone(it))}</div>
     <h1 class="groot">${esc(itemNaam(it))}</h1>
     <div class="klok"><b id="minuten">${verstreken()} min</b><span class="stil">${s.pauze ? 'gepauzeerd' : 'bezig'} · ${esc(itemTijd(it))}</span></div>
-    ${it.type === 'rondje' ? `<div class="kaartje" style="margin:0"><div class="lijst">${it.ids.map(id => { const k = vind(id); if (!k) return ''; const ok = k.status === 'gedaan'; return `<button type="button" class="item" data-doe="vinkrondje" data-id="${id}" aria-pressed="${ok}"><span class="st ${ok ? 'kan' : 'wacht'}">${ok ? ICON.vinkje : ''}</span><span class="t"><b style="${ok ? 'text-decoration:line-through;color:var(--stil)' : ''}">${esc(k.tekst)}</b></span></button>`; }).join('')}</div></div>` : ''}
+    ${it.type === 'rondje' ? `<div class="kaartje" style="margin:0"><div class="lijst">${it.ids.map(id => { const k = vind(id); if (!k) return ''; const ok = k.status !== 'open'; return `<button type="button" class="item" data-doe="vinkrondje" data-id="${id}" aria-pressed="${ok}"><span class="st ${ok ? 'kan' : 'wacht'}">${ok ? ICON.vinkje : ''}</span><span class="t"><b style="${ok ? 'text-decoration:line-through;color:var(--stil)' : ''}">${esc(k.tekst)}</b></span></button>`; }).join('')}</div></div>` : ''}
     ${om ? '<div class="zonregel">Je blok is om. Rond deze af en stop dan gerust.</div>' : ''}
     ${volgende ? `<div class="rij klein" style="color:var(--stil2)">${ICON.pijl}Hierna: ${esc(itemNaam(volgende))}</div>` : '<div class="klein" style="color:var(--stil2)">Dit is de laatste van de set.</div>'}
     <button type="button" class="knop hoofd" style="min-height:64px;font-size:19px" data-doe="klaar">${ICON.vink}Klaar</button>
@@ -772,25 +881,28 @@ function tekenKlaar(app){
 function tekenOverzicht(app){
   const os = open(), sn = snelle(), oo = ooitjes();
   const maand = new Date(); maand.setDate(1); maand.setHours(0,0,0,0);
-  const gedaan = S.klussen.filter(k => k.status === 'gedaan' && k.afgerond >= maand.getTime());
+  const gedaanN = S.klussen.filter(k => k.status === 'gedaan' && !k.herhaal && k.afgerond >= maand.getTime()).length + S.klussen.reduce((t, k) => t + (k.log || []).filter(x => x >= maand.getTime()).length, 0);
+  const terugkerend = S.klussen.filter(k => k.herhaal && soortVan(k) !== 'ooit' && (k.status === 'open' || k.status === 'slaapt')).sort((a, b) => (a.status === 'open' ? 0 : a.volgende) - (b.status === 'open' ? 0 : b.volgende));
   const los = S.klussen.filter(k => k.status === 'los' && k.afgerond >= maand.getTime());
   const groepen = [];
   ROUTE.forEach(z => { const ks = os.filter(k => (k.zone || null) === z); if (ks.length) groepen.push([z, ks]); });
-  const recent = S.klussen.filter(k => k.status !== 'open').sort((a, b) => b.afgerond - a.afgerond).slice(0, 8);
+  const recent = S.klussen.filter(k => k.status !== 'open' && k.afgerond).sort((a, b) => b.afgerond - a.afgerond).slice(0, 8);
+  const recentWoord = k => k.status === 'slaapt' ? (k.laatsteActie === 'overgeslagen' ? 'overgeslagen' : 'gedaan') : k.status === 'gedaan' ? 'gedaan' : 'losgelaten';
   const factor = String(Math.round(S.factor * 10) / 10).replace('.', ',');
   app.innerHTML = `
   <button type="button" class="terug" data-doe="terug">${ICON.terug}Kaart</button>
   <div class="stack">
     <h1>Overzicht</h1>
-    <div class="cijfers"><div><b>${os.length + sn.length}</b><span>in bewaring</span></div><div><b>${gedaan.length}</b><span>gedaan deze maand</span></div><div><b>${los.length}</b><span>losgelaten deze maand</span></div></div>
+    <div class="cijfers"><div><b>${os.length + sn.length}</b><span>in bewaring</span></div><div><b>${gedaanN}</b><span>gedaan deze maand</span></div><div><b>${los.length}</b><span>losgelaten deze maand</span></div></div>
     <div class="kaartje" style="margin:0"><div class="label">Jouw tijdsfactor</div>
       <p style="margin:6px 0 0">${S.antwoorden.length >= 3 ? `Je klussen duren ongeveer <strong>${factor} keer</strong> zo lang als je gok.` : `De app rekent nu met <strong>${factor} keer</strong> je gok. Na een paar klussen weet ze het beter.`}</p></div>
     <div class="kaartje" style="margin:0"><div class="label">Alles in bewaring</div>
       ${os.length || sn.length ? groepen.map(([z, ks]) => `<div class="groep"><div class="groepnaam">${esc(zoneNaam(z))}</div>${ks.map(k => knopRij(k)).join('')}</div>`).join('') +
         (sn.length ? `<div class="groep"><div class="groepnaam">Even snel</div>${sn.map(k => knopRij(k)).join('')}</div>` : '') : '<p class="stil" style="margin:8px 0 0">Niets in bewaring. Hoofd leeg.</p>'}
     </div>
+    ${terugkerend.length ? `<div class="kaartje" style="margin:0"><div class="label">Komt vanzelf terug · ${terugkerend.length}</div><div class="lijst" style="margin-top:8px">${terugkerend.map(k => `<button type="button" class="item" data-doe="ga" data-h="#klus/${k.id}"><span class="st ${k.status === 'open' ? 'kan' : 'wacht'}">${k.status === 'open' ? '' : ICON.herhaal}</span><span class="t"><b>${naamHtml(k)}</b><span>${esc(herhaalTekst(k.herhaal))} · ${k.status === 'open' ? 'nu aan de beurt' : 'komt terug op ' + datum(k.volgende)}${k.zone ? ' · ' + esc(zoneNaam(k.zone)) : ''}</span></span></button>`).join('')}</div></div>` : ''}
     ${oo.length ? `<details><summary>Ooit · ${oo.length}</summary>${groepeer(oo).map(([z, ks]) => `<div class="groep"><div class="groepnaam">${esc(zoneNaam(z))}</div>${ks.map(k => knopRij(k, true)).join('')}</div>`).join('')}</details>` : ''}
-    ${recent.length ? `<div class="kaartje" style="margin:0"><div class="label">Onlangs</div><div class="lijst" style="margin-top:8px">${recent.map(k => `<button type="button" class="item" data-doe="ga" data-h="#klus/${k.id}"><span class="t"><b>${esc(k.tekst)}</b><span>${k.status === 'gedaan' ? 'gedaan' : 'losgelaten'} op ${datum(k.afgerond)}</span></span></button>`).join('')}</div></div>` : ''}
+    ${recent.length ? `<div class="kaartje" style="margin:0"><div class="label">Onlangs</div><div class="lijst" style="margin-top:8px">${recent.map(k => `<button type="button" class="item" data-doe="ga" data-h="#klus/${k.id}"><span class="t"><b>${esc(k.tekst)}</b><span>${recentWoord(k)} op ${datum(k.afgerond)}</span></span></button>`).join('')}</div></div>` : ''}
     <div class="kaartje stack" style="margin:0"><div class="label">Back-up</div>
       <span class="klein" style="color:var(--stil2)">${S.laatsteBackup ? 'Laatste back-up: ' + datum(S.laatsteBackup) + '.' : 'Nog geen back-up gemaakt.'} Alles staat alleen op deze telefoon.</span>
       <div class="g3" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
@@ -808,6 +920,19 @@ const DOE = {
   gooi: d => { nieuwConcept(d.z); startLuisteren(); ga('#gooi' + (d.z ? '/' + d.z : '')); },
   luister: () => { if (luistert) stopLuisteren(); else startLuisteren(); tekenLuister(); },
   weg: d => { if (d.k === 'zone') concept.zone = null; concept.weg[d.k] = true; tekenChips(); },
+  cyclusherhaal: () => {
+    const v = $('#vang'); if (v) concept.tekst = v.value;
+    const nuH = conceptKlus().herhaal, i = HERHAAL_CYCLUS.findIndex(h => herhaalTekst(h) === herhaalTekst(nuH));
+    concept.herhaal = HERHAAL_CYCLUS[(i + 1) % HERHAAL_CYCLUS.length]; tekenChips();
+  },
+  cyclusprio: () => {
+    const v = $('#vang'); if (v) concept.tekst = v.value;
+    const p = conceptKlus().prio || 'gewoon';
+    concept.prio = { gewoon:'hoog', hoog:'laag', laag:'gewoon' }[p]; tekenChips();
+  },
+  prio: d => { const k = vind(route()[1]); if (!k) return; k.prio = d.p === 'gewoon' ? undefined : d.p; bewaar(); teken(); },
+  overslaan: d => { const terugzet = momentopname(); const k = vind(d.id); if (!k || !k.herhaal) return; slaapIn(k, 'overgeslagen'); bewaar(); toast('Overgeslagen. Volgende keer: ' + datum(k.volgende), terugzet); if (route()[0] === 'klus') terug(); else teken(); },
+  wekNu: d => { const k = vind(d.id); if (!k) return; k.status = 'open'; k.wakker = nu(); k.volgende = null; k.afgerond = null; k.laatsteActie = null; bewaar(); toast('Staat terug bij ' + zoneNaam(k.zone)); teken(); },
   bewaar: () => {
     stopLuisteren();
     concept.tekst = $('#vang').value;
@@ -824,20 +949,21 @@ const DOE = {
     }
     const r = conceptKlus(), terugzet = momentopname();
     const tekstIn = soort === 'ooit' ? concept.tekst.replace(/^\s*(ik wil |ik moet )?(ooit|later eens|op termijn)( nog| eens)?[\s,]*/i, '') : concept.tekst;
-    const k = { id:nieuwId(), soort, tekst:netteTekst(tekstIn || concept.tekst), zone:r.zone, droog:!!r.droog, ayke:r.ayke, weekend:r.weekend, materiaal: soort === 'snel' ? '' : r.materiaal, inHuis:false, wachtOp:null, vast:false, gok:r.gok || 5, status:'open', gemaakt:nu(), afgerond:null };
+    const k = { id:nieuwId(), soort, tekst:netteTekst(tekstIn || concept.tekst) || concept.tekst.trim(), zone:r.zone, droog:!!r.droog, ayke:r.ayke, weekend:r.weekend, materiaal: soort === 'snel' ? '' : r.materiaal, inHuis:false, wachtOp:null, vast:false, gok:r.gok || 5, status:'open', gemaakt:nu(), afgerond:null };
+    if (soort !== 'ooit') { if (r.herhaal) k.herhaal = r.herhaal; if (r.prio && r.prio !== 'gewoon') k.prio = r.prio; }
     S.klussen.push(k); bewaar(); nieuwConcept();
-    toast(soort === 'snel' ? 'Bewaard bij Even snel' : soort === 'ooit' ? 'Bewaard bij Ooit' + (k.zone ? ' · ' + zoneNaam(k.zone) : '') : (k.zone ? 'Bewaard bij ' + zoneNaam(k.zone) : 'Bewaard bij Nog te plaatsen'), terugzet);
+    toast((soort === 'snel' ? 'Bewaard bij Even snel' : soort === 'ooit' ? 'Bewaard bij Ooit' + (k.zone ? ' · ' + zoneNaam(k.zone) : '') : (k.zone ? 'Bewaard bij ' + zoneNaam(k.zone) : 'Bewaard bij Nog te plaatsen')) + (k.herhaal ? ' · ' + herhaalTekst(k.herhaal) : ''), terugzet);
     terug();
   },
   toggle: d => { const k = vind(route()[1]); k[d.v] = !k[d.v]; bewaar(); teken(); },
-  gedaan: d => { const terugzet = momentopname(); const k = vind(d.id); k.status = 'gedaan'; k.afgerond = nu(); bewaar(); toast('Gedaan: ' + k.tekst, terugzet); if (route()[0] === 'klus') terug(); else teken(); },
-  los: d => { const terugzet = momentopname(); const k = vind(d.id); k.status = 'los'; k.afgerond = nu(); bewaar(); toast('Losgelaten: ' + k.tekst, terugzet); if (route()[0] === 'klus') terug(); else teken(); },
-  heropen: d => { const k = vind(d.id); k.status = 'open'; k.afgerond = null; bewaar(); teken(); },
+  gedaan: d => { const terugzet = momentopname(); const k = vind(d.id); markeerGedaan(k); bewaar(); toast(k.herhaal ? 'Gedaan. Komt terug op ' + datum(k.volgende) : 'Gedaan: ' + k.tekst, terugzet); if (route()[0] === 'klus') terug(); else teken(); },
+  los: d => { const terugzet = momentopname(); const k = vind(d.id); const herhaalde = !!k.herhaal && soortVan(k) !== 'ooit'; k.status = 'los'; k.afgerond = nu(); k.volgende = null; bewaar(); toast((herhaalde ? 'Gestopt met herhalen: ' : 'Losgelaten: ') + k.tekst, terugzet); if (route()[0] === 'klus') terug(); else teken(); },
+  heropen: d => { const k = vind(d.id); heropenKlus(k); bewaar(); teken(); },
   gekocht: d => { const terugzet = momentopname(); open().forEach(k => { if (k.materiaal && k.materiaal.toLowerCase() === d.m) k.inHuis = true; }); bewaar(); toast('Gekocht: ' + d.m, terugzet); teken(); },
   kiessoort: d => { const v = $('#vang'); if (v) concept.tekst = v.value; concept.soort = d.s; tekenChips(); },
   fichesoort: d => { const k = vind(route()[1]); if (!k) return; k.soort = d.s; bewaar(); teken(); },
   oppakken: d => { const terugzet = momentopname(); const k = vind(d.id); k.soort = 'klus'; bewaar(); toast('Opgepakt: staat nu bij je klussen', terugzet); teken(); },
-  vinkrondje: d => { const k = vind(d.id); if (!k) return; if (k.status === 'gedaan') { k.status = 'open'; k.afgerond = null; } else { k.status = 'gedaan'; k.afgerond = nu(); } bewaar(); teken(); },
+  vinkrondje: d => { const k = vind(d.id); if (!k) return; if (k.status !== 'open') heropenKlus(k); else markeerGedaan(k); bewaar(); teken(); },
   gekochtlos: d => { const terugzet = momentopname(); const b = S.boodschappen.find(x => x.id === d.id); if (b) { b.gekocht = nu(); bewaar(); toast('Gekocht: ' + b.naam, terugzet); } teken(); },
   zeterop: () => { const v = $('#nieuw-boodschap'); const items = koopItems(v.value); if (!items.length) { v.focus(); return; } const w = welkeWinkel(v.value), terugzet = momentopname(); items.forEach(i => S.boodschappen.push({ id:nieuwId(), naam:i, winkel:w, gekocht:false, gemaakt:nu() })); bewaar(); toast('Op het winkelbriefje: ' + items.join(', '), terugzet); teken(); setTimeout(() => $('#nieuw-boodschap')?.focus(), 30); },
   blok: d => { S.blok = Number(d.m); setVariant = 0; bewaar(); teken(); },
@@ -850,15 +976,15 @@ const DOE = {
   klaar: () => {
     const s = S.set, it = huidigItem(); if (!it) return;
     if (s.pauze) { s.pauzeTotaal += nu() - s.pauze; s.pauze = null; }
-    if (it.type === 'rondje') { const n = it.ids.filter(id => vind(id)?.status === 'gedaan').length; toast(n + (n === 1 ? ' klein ding' : ' kleine dingen') + ' gedaan'); return DOE.antwoord({ a:'' }); }
+    if (it.type === 'rondje') { const n = it.ids.filter(id => { const k = vind(id); return k && k.status !== 'open'; }).length; toast(n + (n === 1 ? ' klein ding' : ' kleine dingen') + ' gedaan'); return DOE.antwoord({ a:'' }); }
     if (it.type === 'winkel') { it.gekocht = []; it.losGekocht = []; open().forEach(k => { if (k.materiaal && !k.inHuis && it.materialen.includes(k.materiaal.toLowerCase())) { k.inHuis = true; it.gekocht.push(k.id); } }); losseBoodschappen().forEach(b => { if (it.materialen.includes(b.naam.toLowerCase())) { b.gekocht = nu(); it.losGekocht.push(b.id); } }); }
-    else { const k = vind(it.id); if (k) { k.status = 'gedaan'; k.afgerond = nu(); } }
+    else { const k = vind(it.id); if (k) markeerGedaan(k); }
     s.vraag = true; bewaar(); vervang('#klaar');
   },
   nietklaar: () => {
     const s = S.set, it = huidigItem(); if (!it) return;
     if (it.type === 'winkel') { (it.gekocht || []).forEach(id => { const k = vind(id); if (k) k.inHuis = false; }); (it.losGekocht || []).forEach(id => { const b = S.boodschappen.find(x => x.id === id); if (b) b.gekocht = false; }); }
-    else { const k = vind(it.id); if (k) { k.status = 'open'; k.afgerond = null; } }
+    else { const k = vind(it.id); if (k && k.status !== 'open') heropenKlus(k); }
     s.vraag = false; bewaar(); vervang('#set');
   },
   antwoord: d => {
@@ -912,6 +1038,11 @@ document.addEventListener('change', e => {
   if (v === 'f-mat') { k.materiaal = t.value.trim(); if (!k.materiaal) k.inHuis = false; }
   if (v === 'f-inhuis') k.inHuis = t.checked;
   if (v === 'f-wacht') k.wachtOp = t.value || null;
+  if (v === 'f-h-e' || v === 'f-h-n') {
+    const e = v === 'f-h-e' ? t.value : (k.herhaal ? k.herhaal.eenheid : '');
+    const nn = v === 'f-h-n' ? parseInt(t.value, 10) : (k.herhaal ? k.herhaal.n : ({ dag:1, week:1, maand:1 })[e]);
+    zetHerhaal(k, e && nn > 0 ? { n:Math.min(nn, 365), eenheid:e } : (e ? k.herhaal : null));
+  }
   bewaar(); teken();
 });
 
