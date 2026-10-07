@@ -135,6 +135,14 @@ summary{font-weight:700;min-height:24px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom));z-index:30;max-width:448px;width:calc(100% - 32px);background:var(--inkt);color:#fff;border-radius:12px;padding:10px 12px 10px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:14px}
 .toast button{border:0;background:none;color:#B9E3C9;font-weight:700;min-height:40px;font-size:14px}
 .verborgen{display:none!important}
+.groep{margin-top:12px}
+.groepnaam{font-size:13px;font-weight:700;color:var(--stil2);margin-bottom:4px}
+.rijklus{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid #E1E5E0}
+.klusnaam{flex:1;min-width:0;border:0;background:none;text-align:left;padding:4px 0;min-height:44px;display:flex;flex-direction:column;justify-content:center;gap:2px}
+.klusnaam b{font-size:15px}
+.klusnaam span{font-size:12px;color:var(--stil)}
+.knoppen{display:flex;gap:6px;flex-shrink:0}
+.knoppen .chip{min-height:44px;padding:0 10px;font-size:13px}
 .tuin .z.compost,.tuin .z.tuinhuis{background:#fff}
 .verd .z{align-items:flex-end;padding-bottom:7px}
 textarea:focus,input:focus,select:focus{outline:2px solid var(--mos);outline-offset:1px}
@@ -175,29 +183,21 @@ const WOORDEN = [
   ['tuinhuis','tuinhuis'],['compost','compost'],
   ['gras','gras'],['gazon','gras'],['haag','gras'],['onkruid','gras'],['maaien','gras'],['tuin','gras']
 ];
+const WINKELS = ['hubo','brico','gamma','action','delhaize','colruyt','aldi','lidl','carrefour','apotheek','kruidvat','blokker','ikea'];
 const SPULLEN = ['scharnieren','scharnier','schroeven','pluggen','lampen','lamp','lampje','batterijen','batterij','verf','silicone','kit','slot','plank','planken','tegels','filter','potgrond','zakken','vuilniszakken','kraan','stekkerdoos','verlengkabel','lijm','handschoenen','zaad','meststof'];
 
 /* ---------- opslag ---------- */
 function nu(){ return Date.now(); }
 function nieuwId(){ return Math.random().toString(36).slice(2,9); }
 function startToestand(){
-  const t = nu();
-  const deur = {id:nieuwId(), tekst:'Deur van het tuinhuis repareren', zone:'tuinhuis', droog:true, ayke:false, weekend:false, materiaal:'scharnieren', inHuis:false, wachtOp:null, gok:30, status:'open', gemaakt:t, afgerond:null};
-  return {
-    klussen:[
-      {id:nieuwId(), tekst:'Dakgoot kuisen', zone:'dak', droog:true, ayke:false, weekend:false, materiaal:'', inHuis:false, wachtOp:null, gok:25, status:'open', gemaakt:t, afgerond:null},
-      deur,
-      {id:nieuwId(), tekst:'Spullen in het tuinhuis zetten', zone:'tuinhuis', droog:false, ayke:false, weekend:false, materiaal:'', inHuis:false, wachtOp:deur.id, gok:20, status:'open', gemaakt:t, afgerond:null},
-      {id:nieuwId(), tekst:'Factuur betalen', zone:'bureau', droog:false, ayke:false, weekend:false, materiaal:'', inHuis:false, wachtOp:null, gok:5, status:'open', gemaakt:t, afgerond:null}
-    ],
-    factor:3, antwoorden:[], ayke:false, blok:240, sinds:t, laatsteBackup:null, set:null, weer:null
-  };
+  return { klussen:[], boodschappen:[], factor:3, antwoorden:[], ayke:false, blok:240, sinds:nu(), laatsteBackup:null, set:null, weer:null };
 }
 let S;
 function laad(){
   try { const r = localStorage.getItem(OPSLAG); if (r) { S = Object.assign(startToestand(), JSON.parse(r)); return; } } catch(e) {}
   S = startToestand(); bewaar();
 }
+function opkuis(){ const grens = nu() - 30*24*3600*1000; S.boodschappen = (S.boodschappen || []).filter(b => !b.gekocht || b.gekocht > grens); }
 function bewaar(){ try { localStorage.setItem(OPSLAG, JSON.stringify(S)); } catch(e) {} }
 
 /* ---------- hulpjes ---------- */
@@ -296,6 +296,21 @@ function winkelBriefje(){
   open().forEach(k => { if (k.materiaal && !k.inHuis) { (lijst[k.materiaal.toLowerCase()] ||= []).push(k); } });
   return lijst;
 }
+function losseBoodschappen(){ return (S.boodschappen || []).filter(b => !b.gekocht); }
+function briefjeAantal(){ return Object.keys(winkelBriefje()).length + losseBoodschappen().length; }
+function alleTeKopen(){ return Object.keys(winkelBriefje()).concat(losseBoodschappen().map(b => b.naam.toLowerCase())); }
+function koopItems(tekst){
+  let t = ' ' + tekst.toLowerCase() + ' ';
+  t = t.replace(/\b(op (het|de) (winkel)?(briefje|lijst)|op de winkellijst|winkelbriefje|winkellijst|boodschappen|boodschap|ik moet|moet ik|nog|kopen|halen|zetten|bij de|bij|in de|voor)\b/g, ' ');
+  WINKELS.forEach(w => { t = t.replace(new RegExp('\\b' + w + '\\b', 'g'), ' '); });
+  return t.split(/,|;|\ben\b|\n/).map(x => x.replace(/[.!?]/g, '').replace(/\s+/g, ' ').trim()).filter(x => x.length > 1);
+}
+function welkeWinkel(tekst){ const s = tekst.toLowerCase(); const w = WINKELS.find(x => new RegExp('\\b' + x + '\\b').test(s)); return w ? w.charAt(0).toUpperCase() + w.slice(1) : ''; }
+function lijktKopen(tekst, zone){
+  const s = ' ' + tekst.toLowerCase() + ' ';
+  if (zone) return false;
+  return /\b(kopen|halen|boodschap|boodschappen|winkellijst|winkelbriefje|briefje)\b/.test(s) || WINKELS.some(w => s.includes(' ' + w + ' '));
+}
 
 /* ---------- herkennen wat je zegt ---------- */
 function herken(tekst){
@@ -342,7 +357,7 @@ function toast(tekst, terugzet){
   toastTimer = setTimeout(() => { $('#toast').classList.add('verborgen'); herstel = null; }, 5000);
 }
 $('#toast-knop').addEventListener('click', () => { if (herstel) { herstel(); herstel = null; bewaar(); teken(); } $('#toast').classList.add('verborgen'); });
-function momentopname(){ const kopie = JSON.stringify(S.klussen); return () => { S.klussen = JSON.parse(kopie); }; }
+function momentopname(){ const kopie = JSON.stringify({ k:S.klussen, b:S.boodschappen || [] }); return () => { const o = JSON.parse(kopie); S.klussen = o.k; S.boodschappen = o.b; }; }
 
 /* ---------- spraak ---------- */
 let herkenner = null, luistert = false, spraakFout = '';
@@ -368,8 +383,9 @@ function startLuisteren(){
 function stopLuisteren(){ if (herkenner && luistert) { try { herkenner.stop(); } catch(e) {} } luistert = false; }
 
 /* ---------- concept voor gooi erin ---------- */
-let concept = { tekst:'', weg:{}, zone:null };
-function nieuwConcept(zone){ concept = { tekst:'', weg:{}, zone: zone || null }; }
+let concept = { tekst:'', weg:{}, zone:null, kopen:null };
+function nieuwConcept(zone){ concept = { tekst:'', weg:{}, zone: zone === 'winkel' ? null : (zone || null), kopen: zone === 'winkel' ? true : null }; }
+function isKopen(){ return concept.kopen !== null ? concept.kopen : lijktKopen(concept.tekst, concept.zone || herken(concept.tekst).zone); }
 function conceptKlus(){
   const r = herken(concept.tekst);
   if (concept.zone) { r.zone = concept.zone; if (ZONES[r.zone]?.buiten) r.droog = true; }
@@ -389,6 +405,7 @@ function stelSetSamen(){
   const kandidaten = [], pastNiet = [];
   const briefje = winkelBriefje();
   const materialen = Object.keys(briefje);
+  const teKopen = alleTeKopen();
   open().forEach(k => {
     const reden = wachtReden(k, ctx);
     if (!reden) { kandidaten.push({ k, naWinkel:false }); return; }
@@ -408,11 +425,11 @@ function stelSetSamen(){
     let nodig = reken(c.k);
     if (c.naWinkel && !winkel) nodig += winkelTijd;
     if (nodig <= rest) {
-      if (c.naWinkel && !winkel) { winkel = { type:'winkel', materialen, tijd:winkelTijd }; rest -= winkelTijd; }
+      if (c.naWinkel && !winkel) { winkel = { type:'winkel', materialen:teKopen, tijd:winkelTijd }; rest -= winkelTijd; }
       gekozen.push({ type:'klus', id:c.k.id, tijd:reken(c.k), zone:c.k.zone }); rest -= reken(c.k);
     } else pastNiet.push({ tekst:c.k.tekst, reden:'past niet meer in je blok' });
   }
-  if (!winkel && materialen.length && winkelTijd <= rest && gekozen.length) { winkel = { type:'winkel', materialen, tijd:winkelTijd }; rest -= winkelTijd; }
+  if (!winkel && teKopen.length && winkelTijd <= rest) { winkel = { type:'winkel', materialen:teKopen, tijd:winkelTijd }; rest -= winkelTijd; }
   gekozen.sort((a, b) => ROUTE.indexOf(a.zone) - ROUTE.indexOf(b.zone));
   if (winkel) gekozen.unshift(Object.assign(winkel, { zone:'winkel' }));
   return { items:gekozen, totaal:blok - rest, rest, pastNiet };
@@ -450,7 +467,7 @@ function tekenKaart(app){
   const dagen = w0 && w0.leeg ? [['Morgen', w1], ['Overmorgen', w2]] : [['Vandaag', w0], ['Morgen', w1]];
   const weer = dagen.map(([naam, w]) => w ? `<div class="${w.droog ? 'droog' : ''}">${w.droog ? ICON.zon : ICON.regen}<span><strong>${naam}</strong><br>${esc(w.tekst)}</span></div>` : `<div>${ICON.regen}<span><strong>${naam}</strong><br>geen weerbericht</span></div>`).join('');
   const backupOud = n && (S.laatsteBackup ? nu() - S.laatsteBackup : nu() - S.sinds) > 30*24*3600*1000;
-  const briefje = Object.keys(winkelBriefje()).length;
+  const briefje = briefjeAantal();
   const bakje = open().filter(k => !k.zone).length;
   app.innerHTML = `
   <div class="kop"><h1>Thuis</h1>
@@ -497,10 +514,16 @@ function klusItem(k){
 function tekenPaneel(z){
   let titel, inhoud;
   if (z === 'winkel') {
-    const lijst = winkelBriefje(), keys = Object.keys(lijst);
+    const lijst = winkelBriefje(), keys = Object.keys(lijst), los = losseBoodschappen();
     titel = 'Winkelbriefje';
-    inhoud = keys.length ? keys.map(m => `<div class="item"><span class="t"><b>${esc(m)}</b><span>voor: ${esc(lijst[m].map(k => k.tekst.toLowerCase()).join(', '))}</span></span>
-      <button type="button" class="chip aan" data-doe="gekocht" data-m="${esc(m)}">Gekocht</button></div>`).join('') : '<p class="stil">Niets te kopen. Zeg bij Gooi erin wat je nodig hebt, dan komt het hier.</p>';
+    const invoer = `<div class="rij"><input type="text" id="nieuw-boodschap" placeholder="Iets toevoegen, bv. batterijen" style="background:var(--vlak2);font-size:16px" enterkeyhint="done">
+      <button type="button" class="chip aan" data-doe="zeterop" style="flex-shrink:0">Zet erop</button></div>
+      <button type="button" class="knop licht klein" style="border:1.5px dashed #9AA39C" data-doe="gooi" data-z="winkel">${ICON.mic}Inspreken</button>`;
+    const losHtml = los.map(b => `<div class="item"><span class="t"><b>${esc(b.naam)}</b><span>${b.winkel ? 'bij ' + esc(b.winkel) : 'los op het briefje'}</span></span>
+      <button type="button" class="chip aan" data-doe="gekochtlos" data-id="${b.id}">Gekocht</button></div>`).join('');
+    const klusHtml = keys.map(m => `<div class="item"><span class="t"><b>${esc(m)}</b><span>voor: ${esc(lijst[m].map(k => k.tekst.toLowerCase()).join(', '))}</span></span>
+      <button type="button" class="chip aan" data-doe="gekocht" data-m="${esc(m)}">Gekocht</button></div>`).join('');
+    inhoud = invoer + (los.length || keys.length ? losHtml + klusHtml : '<p class="stil">Niets te kopen.</p>');
   } else if (z === 'bakje') {
     const ks = open().filter(k => !k.zone);
     titel = 'Nog te plaatsen';
@@ -511,7 +534,7 @@ function tekenPaneel(z){
     inhoud = (ks.length ? ks.map(klusItem).join('') : '<p class="stil">Hier ligt niets.</p>') +
       `<button type="button" class="knop licht klein" style="border:1.5px dashed #9AA39C" data-doe="gooi" data-z="${z}">${ICON.mic}Iets toevoegen aan ${esc(titel)}</button>`;
   }
-  const n = z === 'winkel' ? Object.keys(winkelBriefje()).length : (z === 'bakje' ? open().filter(k => !k.zone).length : open().filter(k => k.zone === z).length);
+  const n = z === 'winkel' ? briefjeAantal() : (z === 'bakje' ? open().filter(k => !k.zone).length : open().filter(k => k.zone === z).length);
   $('#laag').innerHTML = `<div class="paneel-achter" data-doe="terug"></div>
     <div class="paneel" role="dialog" aria-label="${esc(titel)}"><div class="in"><div class="greep"></div>
     <div class="kop" style="margin:0"><h2>${esc(titel)}</h2><span class="stil klein">${n} ${z === 'winkel' ? (n === 1 ? 'ding' : 'dingen') : (n === 1 ? 'klus' : 'klussen')}</span></div>
@@ -519,6 +542,7 @@ function tekenPaneel(z){
 }
 
 function tekenGooi(app, zone){
+  if (zone === 'winkel') { if (!concept.tekst) concept.kopen = true; zone = null; }
   if (zone && !ZONES[zone]) zone = null;
   if (concept.zone !== (zone || null) && !concept.tekst) concept.zone = zone || null;
   const bakje = open().filter(k => !k.zone);
@@ -545,6 +569,13 @@ function tekenLuister(){
 function tekenChips(){
   const el = $('#chips'); if (!el) return;
   const r = conceptKlus(), c = [];
+  const kopen = isKopen();
+  const soort = `<button type="button" class="chip ${kopen ? 'aan' : 'uit'}" aria-pressed="${kopen}" data-doe="soort">${ICON.kar}Alleen kopen</button>`;
+  if (kopen) {
+    const items = koopItems(concept.tekst), w = welkeWinkel(concept.tekst);
+    el.innerHTML = soort + items.map(i => `<span class="chip">${esc(i)}</span>`).join('') + (w ? `<span class="chip uit">bij ${esc(w)}</span>` : '');
+    return;
+  }
   if (r.zone) c.push(['zone', esc(zoneNaam(r.zone)), '']);
   else c.push(['', 'nog geen plek', 'uit']);
   if (r.materiaal) c.push(['materiaal', ICON.kar + esc(r.materiaal), '']);
@@ -552,7 +583,7 @@ function tekenChips(){
   if (r.ayke) c.push(['ayke', 'Ayke thuis', '']);
   if (r.weekend) c.push(['weekend', 'weekend', '']);
   if (r.gok) c.push(['', 'gok ' + duur(r.gok), 'uit']);
-  el.innerHTML = c.map(([k, t, cls]) => k ? `<button type="button" class="chip ${cls}" data-doe="weg" data-k="${k}" aria-label="${k} verwijderen">${t} <span aria-hidden="true">×</span></button>` : `<span class="chip ${cls}">${t}</span>`).join('');
+  el.innerHTML = soort + c.map(([k, t, cls]) => k ? `<button type="button" class="chip ${cls}" data-doe="weg" data-k="${k}" aria-label="${k} verwijderen">${t} <span aria-hidden="true">×</span></button>` : `<span class="chip ${cls}">${t}</span>`).join('');
 }
 
 function tekenKlus(app, id){
@@ -674,7 +705,8 @@ function tekenOverzicht(app){
   const maand = new Date(); maand.setDate(1); maand.setHours(0,0,0,0);
   const gedaan = S.klussen.filter(k => k.status === 'gedaan' && k.afgerond >= maand.getTime());
   const los = S.klussen.filter(k => k.status === 'los' && k.afgerond >= maand.getTime());
-  const oudste = os.length > 15 ? [...os].sort((a, b) => a.gemaakt - b.gemaakt).slice(0, 3) : [];
+  const groepen = [];
+  ROUTE.forEach(z => { const ks = os.filter(k => (k.zone || null) === z); if (ks.length) groepen.push([z, ks]); });
   const recent = S.klussen.filter(k => k.status !== 'open').sort((a, b) => b.afgerond - a.afgerond).slice(0, 8);
   const factor = String(Math.round(S.factor * 10) / 10).replace('.', ',');
   app.innerHTML = `
@@ -684,7 +716,11 @@ function tekenOverzicht(app){
     <div class="cijfers"><div><b>${os.length}</b><span>in bewaring</span></div><div><b>${gedaan.length}</b><span>gedaan deze maand</span></div><div><b>${los.length}</b><span>losgelaten deze maand</span></div></div>
     <div class="kaartje" style="margin:0"><div class="label">Jouw tijdsfactor</div>
       <p style="margin:6px 0 0">${S.antwoorden.length >= 3 ? `Je klussen duren ongeveer <strong>${factor} keer</strong> zo lang als je gok.` : `De app rekent nu met <strong>${factor} keer</strong> je gok. Na een paar klussen weet ze het beter.`}</p></div>
-    ${oudste.length ? `<div class="kaartje" style="margin:0"><div class="label">Zit er al lang in</div><div class="lijst" style="margin-top:8px">${oudste.map(k => `<div class="item"><span class="t"><b>${esc(k.tekst)}</b><span>sinds ${datum(k.gemaakt)}</span></span><button type="button" class="chip uit" data-doe="los" data-id="${k.id}">Laat los</button></div>`).join('')}</div></div>` : ''}
+    <div class="kaartje" style="margin:0"><div class="label">Alles in bewaring</div>
+      ${os.length ? groepen.map(([z, ks]) => `<div class="groep"><div class="groepnaam">${esc(zoneNaam(z))}</div>${ks.map(k => `<div class="rijklus">
+        <button type="button" class="klusnaam" data-doe="ga" data-h="#klus/${k.id}"><b>${esc(k.tekst)}</b><span>${esc(statusRegel(k))}</span></button>
+        <span class="knoppen"><button type="button" class="chip aan" data-doe="gedaan" data-id="${k.id}" aria-label="Gedaan: ${esc(k.tekst)}">Gedaan</button><button type="button" class="chip uit" data-doe="los" data-id="${k.id}" aria-label="Laat los: ${esc(k.tekst)}">Laat los</button></span></div>`).join('')}</div>`).join('') : '<p class="stil" style="margin:8px 0 0">Niets in bewaring. Hoofd leeg.</p>'}
+    </div>
     ${recent.length ? `<div class="kaartje" style="margin:0"><div class="label">Onlangs</div><div class="lijst" style="margin-top:8px">${recent.map(k => `<button type="button" class="item" data-doe="ga" data-h="#klus/${k.id}"><span class="t"><b>${esc(k.tekst)}</b><span>${k.status === 'gedaan' ? 'gedaan' : 'losgelaten'} op ${datum(k.afgerond)}</span></span></button>`).join('')}</div></div>` : ''}
     <div class="kaartje stack" style="margin:0"><div class="label">Back-up</div>
       <span class="klein" style="color:var(--stil2)">${S.laatsteBackup ? 'Laatste back-up: ' + datum(S.laatsteBackup) + '.' : 'Nog geen back-up gemaakt.'} Alles staat alleen op deze telefoon.</span>
@@ -707,6 +743,15 @@ const DOE = {
     stopLuisteren();
     concept.tekst = $('#vang').value;
     if (!concept.tekst.trim()) { toast('Er staat nog niets. Spreek in of typ iets.'); return; }
+    if (isKopen()) {
+      const items = koopItems(concept.tekst), w = welkeWinkel(concept.tekst);
+      if (!items.length) { toast('Ik hoorde niets om te kopen.'); return; }
+      const terug2 = momentopname();
+      items.forEach(i => S.boodschappen.push({ id:nieuwId(), naam:i, winkel:w, gekocht:false, gemaakt:nu() }));
+      bewaar(); nieuwConcept();
+      toast('Op het winkelbriefje: ' + items.join(', '), terug2);
+      terug(); return;
+    }
     const r = conceptKlus(), terugzet = momentopname();
     const k = { id:nieuwId(), tekst:netteTekst(concept.tekst), zone:r.zone, droog:!!r.droog, ayke:r.ayke, weekend:r.weekend, materiaal:r.materiaal, inHuis:false, wachtOp:null, gok:r.gok || 30, status:'open', gemaakt:nu(), afgerond:null };
     S.klussen.push(k); bewaar(); nieuwConcept();
@@ -714,10 +759,13 @@ const DOE = {
     terug();
   },
   toggle: d => { const k = vind(route()[1]); k[d.v] = !k[d.v]; bewaar(); teken(); },
-  gedaan: d => { const terugzet = momentopname(); const k = vind(d.id); k.status = 'gedaan'; k.afgerond = nu(); bewaar(); toast('Gedaan: ' + k.tekst, terugzet); terug(); },
+  gedaan: d => { const terugzet = momentopname(); const k = vind(d.id); k.status = 'gedaan'; k.afgerond = nu(); bewaar(); toast('Gedaan: ' + k.tekst, terugzet); if (route()[0] === 'klus') terug(); else teken(); },
   los: d => { const terugzet = momentopname(); const k = vind(d.id); k.status = 'los'; k.afgerond = nu(); bewaar(); toast('Losgelaten: ' + k.tekst, terugzet); if (route()[0] === 'klus') terug(); else teken(); },
   heropen: d => { const k = vind(d.id); k.status = 'open'; k.afgerond = null; bewaar(); teken(); },
   gekocht: d => { const terugzet = momentopname(); open().forEach(k => { if (k.materiaal && k.materiaal.toLowerCase() === d.m) k.inHuis = true; }); bewaar(); toast('Gekocht: ' + d.m, terugzet); teken(); },
+  soort: () => { concept.tekst = $('#vang')?.value || concept.tekst; concept.kopen = !isKopen(); tekenChips(); },
+  gekochtlos: d => { const terugzet = momentopname(); const b = S.boodschappen.find(x => x.id === d.id); if (b) { b.gekocht = nu(); bewaar(); toast('Gekocht: ' + b.naam, terugzet); } teken(); },
+  zeterop: () => { const v = $('#nieuw-boodschap'); const items = koopItems(v.value); if (!items.length) { v.focus(); return; } const w = welkeWinkel(v.value), terugzet = momentopname(); items.forEach(i => S.boodschappen.push({ id:nieuwId(), naam:i, winkel:w, gekocht:false, gemaakt:nu() })); bewaar(); toast('Op het winkelbriefje: ' + items.join(', '), terugzet); teken(); setTimeout(() => $('#nieuw-boodschap')?.focus(), 30); },
   blok: d => { S.blok = Number(d.m); setVariant = 0; bewaar(); teken(); },
   andere: () => { setVariant++; teken(); },
   start: () => {
@@ -728,13 +776,13 @@ const DOE = {
   klaar: () => {
     const s = S.set, it = huidigItem(); if (!it) return;
     if (s.pauze) { s.pauzeTotaal += nu() - s.pauze; s.pauze = null; }
-    if (it.type === 'winkel') { it.gekocht = []; open().forEach(k => { if (k.materiaal && !k.inHuis && it.materialen.includes(k.materiaal.toLowerCase())) { k.inHuis = true; it.gekocht.push(k.id); } }); }
+    if (it.type === 'winkel') { it.gekocht = []; it.losGekocht = []; open().forEach(k => { if (k.materiaal && !k.inHuis && it.materialen.includes(k.materiaal.toLowerCase())) { k.inHuis = true; it.gekocht.push(k.id); } }); losseBoodschappen().forEach(b => { if (it.materialen.includes(b.naam.toLowerCase())) { b.gekocht = nu(); it.losGekocht.push(b.id); } }); }
     else { const k = vind(it.id); if (k) { k.status = 'gedaan'; k.afgerond = nu(); } }
     s.vraag = true; bewaar(); vervang('#klaar');
   },
   nietklaar: () => {
     const s = S.set, it = huidigItem(); if (!it) return;
-    if (it.type === 'winkel') (it.gekocht || []).forEach(id => { const k = vind(id); if (k) k.inHuis = false; });
+    if (it.type === 'winkel') { (it.gekocht || []).forEach(id => { const k = vind(id); if (k) k.inHuis = false; }); (it.losGekocht || []).forEach(id => { const b = S.boodschappen.find(x => x.id === id); if (b) b.gekocht = false; }); }
     else { const k = vind(it.id); if (k) { k.status = 'open'; k.afgerond = null; } }
     s.vraag = false; bewaar(); vervang('#set');
   },
@@ -760,6 +808,7 @@ document.addEventListener('click', e => {
   const el = e.target.closest('[data-doe]'); if (!el) return;
   const f = DOE[el.dataset.doe]; if (f) { e.preventDefault(); f(el.dataset); }
 });
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'nieuw-boodschap') { e.preventDefault(); DOE.zeterop(); } });
 document.addEventListener('input', e => {
   const t = e.target, v = t.dataset.in; if (!v) return;
   if (v === 'tekst') { concept.tekst = t.value; tekenChips(); return; }
@@ -774,7 +823,7 @@ document.addEventListener('change', e => {
     lezer.onload = () => {
       try { const j = JSON.parse(lezer.result); if (!Array.isArray(j.klussen)) throw new Error();
         if (!confirm('Je huidige gegevens vervangen door deze back-up?')) return;
-        S = Object.assign(startToestand(), j, { set:null }); bewaar(); toast('Back-up teruggezet.'); teken();
+        S = Object.assign(startToestand(), j, { set:null, weer:null }); bewaar(); toast('Back-up teruggezet: ' + open().length + ' klussen.'); teken(); haalWeer(true);
       } catch(err) { toast('Dit bestand is geen back-up van Thuis.'); }
     };
     lezer.readAsText(t.files[0]); return;
@@ -791,7 +840,7 @@ document.addEventListener('change', e => {
 });
 
 /* ---------- starten ---------- */
-laad();
+laad(); opkuis(); bewaar();
 try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch(e) {}
 if (!location.hash || ((location.hash === '#set' || location.hash === '#klaar') && !S.set)) history.replaceState(null, '', '#kaart');
 if (S.set && location.hash !== '#set' && location.hash !== '#klaar') history.replaceState(null, '', S.set.vraag ? '#klaar' : '#set');
