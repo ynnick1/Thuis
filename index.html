@@ -445,6 +445,9 @@ function stelSetSamen(){
   });
   if (kandidaten.length > 1 && setVariant) { const n = setVariant % kandidaten.length; kandidaten.push(...kandidaten.splice(0, n)); }
   let rest = blok, gekozen = [], winkel = null;
+  const sn = snelle();
+  const rondje = sn.length && blok >= 10 ? { type:'rondje', ids:sn.slice(0, 6).map(k => k.id), tijd:10, zone:null } : null;
+  if (rondje) rest -= 10;
   const winkelTijd = Math.max(10, Math.round(30 * S.factor / 5) * 5);
   for (const c of kandidaten) {
     let nodig = reken(c.k);
@@ -457,8 +460,7 @@ function stelSetSamen(){
   if (!winkel && teKopen.length && winkelTijd <= rest) { winkel = { type:'winkel', materialen:teKopen, tijd:winkelTijd }; rest -= winkelTijd; }
   gekozen.sort((a, b) => ROUTE.indexOf(a.zone) - ROUTE.indexOf(b.zone));
   if (winkel) gekozen.unshift(Object.assign(winkel, { zone:'winkel' }));
-  const sn = snelle();
-  if (sn.length && rest >= 10) { gekozen.push({ type:'rondje', ids:sn.slice(0, 6).map(k => k.id), tijd:10, zone:null }); rest -= 10; }
+  if (rondje) gekozen.unshift(rondje);
   return { items:gekozen, totaal:blok - rest, rest, pastNiet };
 }
 
@@ -564,7 +566,7 @@ function tekenPaneel(z){
   } else if (z === 'snel') {
     const ks = snelle(); titel = 'Even snel'; n = ks.length; eenheid = 'ding';
     inhoud = (ks.length ? `<div>${ks.map(k => knopRij(k)).join('')}</div>` : '<p class="stil">Geen kleine dingen.</p>') +
-      '<p class="stil klein" style="margin:0">Deze springen nooit vanzelf naar voren. Bij Ik heb tijd worden ze samen een klein rondje van 10 minuten.</p>' + toevoegen('snel', 'Iets kleins toevoegen');
+      '<p class="stil klein" style="margin:0">Deze springen nooit vanzelf naar voren. Bij Ik heb tijd worden ze samen een klein rondje van 10 minuten, als opwarmer vooraan in je set.</p>' + toevoegen('snel', 'Iets kleins toevoegen');
   } else if (z === 'ooit') {
     const ks = ooitjes(); titel = 'Ooit'; n = ks.length; eenheid = 'ding';
     inhoud = (ks.length ? groepeer(ks).map(([zz, kk]) => `<div class="groep" style="margin-top:4px"><div class="groepnaam">${esc(zoneNaam(zz))}</div>${kk.map(k => knopRij(k, true)).join('')}</div>`).join('') : '<p class="stil">Nog niets voor ooit.</p>') +
