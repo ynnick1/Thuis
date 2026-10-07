@@ -64,8 +64,8 @@ h2{font-family:var(--titel);font-weight:700;font-size:22px;margin:0}
 .tuin .gras{position:absolute;inset:0;align-items:flex-start;padding-top:10px;border-radius:10px}
 .tuin .compost{position:absolute;left:10px;bottom:10px;width:70px;height:62px;background:#fff;align-items:flex-end;padding-bottom:6px;justify-content:center;color:var(--stil2)}
 .tuin .tuinhuis{position:absolute;right:10px;bottom:10px;width:136px;height:82px;background:#fff;border:2px solid var(--inkt);align-items:flex-end;padding-bottom:8px;color:var(--inkt);font-size:13px;font-weight:700}
-.onder{display:flex;gap:8px;margin-top:10px}
-.onder button{flex:1;min-height:46px;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:0 12px;border-radius:12px;border:0;background:var(--vlak);font-size:13px}
+.onder{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}
+.onder button{min-height:46px;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:0 12px;border-radius:12px;border:0;background:var(--vlak);font-size:13px}
 .onder button.stip{background:none;border:1.5px dashed #9AA39C}
 .balk{position:fixed;left:0;right:0;bottom:0;padding:10px 16px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(to top,var(--grond) 75%,rgba(238,241,236,0))}
 .balk .in{max-width:448px;margin:0 auto;display:flex;gap:10px}
@@ -136,6 +136,10 @@ summary{font-weight:700;min-height:24px}
 .toast button{border:0;background:none;color:#B9E3C9;font-weight:700;min-height:40px;font-size:14px}
 .verborgen{display:none!important}
 .groep{margin-top:12px}
+.soorten{display:flex;flex-wrap:wrap;gap:8px}
+.rijklus.kol{flex-direction:column;align-items:stretch;gap:2px}
+.rijklus.kol .knoppen{padding-bottom:4px}
+details .rijklus{border-top:1px solid #E1E5E0}
 .groepnaam{font-size:13px;font-weight:700;color:var(--stil2);margin-bottom:4px}
 .rijklus{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid #E1E5E0}
 .klusnaam{flex:1;min-width:0;border:0;background:none;text-align:left;padding:4px 0;min-height:44px;display:flex;flex-direction:column;justify-content:center;gap:2px}
@@ -204,10 +208,17 @@ function bewaar(){ try { localStorage.setItem(OPSLAG, JSON.stringify(S)); } catc
 const $ = s => document.querySelector(s);
 function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function duur(min){ min = Math.max(5, Math.round(min/5)*5); if (min < 60) return min + ' min'; const u = Math.floor(min/60), m = min%60; return u + 'u' + (m ? String(m).padStart(2,'0') : ''); }
-function reken(k){ return Math.max(10, Math.round((k.gok||30) * S.factor / 5) * 5); }
+function gokTekst(min){ min = Math.max(1, Math.round(min || 5)); return min < 60 ? min + ' min' : duur(min); }
+function reken(k){ const g = k.gok || 5; const basis = k.vast ? g : g * S.factor; return Math.max(10, Math.round(basis / 5) * 5); }
+function tijdTekst(k){ return k.vast ? duur(reken(k)) + ' (jouw tijd)' : 'jij ' + gokTekst(k.gok) + ' · gerekend ' + duur(reken(k)); }
 function uur(ts){ const d = new Date(ts); return d.getHours() + 'u' + String(d.getMinutes()).padStart(2,'0'); }
 function zoneNaam(z){ if (z === 'winkel') return 'Winkel'; return z && ZONES[z] ? ZONES[z].naam : 'Nog geen plek'; }
-function open(){ return S.klussen.filter(k => k.status === 'open'); }
+function soortVan(k){ return k.soort || 'klus'; }
+function openAlle(){ return S.klussen.filter(k => k.status === 'open'); }
+function open(){ return openAlle().filter(k => soortVan(k) === 'klus'); }
+function snelle(){ return openAlle().filter(k => soortVan(k) === 'snel'); }
+function ooitjes(){ return openAlle().filter(k => soortVan(k) === 'ooit'); }
+function groepeer(ks){ const g = []; ROUTE.forEach(z => { const kk = ks.filter(k => (k.zone || null) === z); if (kk.length) g.push([z, kk]); }); return g; }
 function vind(id){ return S.klussen.find(k => k.id === id); }
 function isWeekend(){ const d = new Date().getDay(); return d === 0 || d === 6; }
 function datum(ts){ return new Date(ts).toLocaleDateString('nl-BE', {day:'numeric', month:'long'}); }
@@ -220,6 +231,9 @@ const ICON = {
   slot:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
   kar:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M3 4h2l2.5 11h11l2-8H6.5"/></svg>',
   vink:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>',
+  snel:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>',
+  ster:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z"/></svg>',
+  vinkje:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>',
   pijl:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>'
 };
 
@@ -323,13 +337,13 @@ function herken(tekst){
   r.ayke = /\b(ayke|eike|aike)\b|samen met/.test(s);
   r.weekend = /weekend|zaterdag|zondag/.test(s);
   let m;
-  if ((m = s.match(/(\d+)\s*(min|minuten|minuutjes)\b/))) r.gok = Number(m[1]);
+  if ((m = s.match(/(\d+)\s*(minuutjes|minuten|minuut|min)\b/))) r.gok = Number(m[1]);
   else if ((m = s.match(/(\d+)\s*(u|uur|uren)\b/))) r.gok = Number(m[1]) * 60;
   else if (/half uur|halfuur/.test(s)) r.gok = 30;
   else if (/kwartier/.test(s)) r.gok = 15;
   return r;
 }
-function netteTekst(t){ t = t.replace(/,?\s*\b(\d+\s*(minuten|minuutjes|min|uren|uur|u)|een kwartier|kwartier|een half uur|half uur|halfuur)\b/gi, '').trim().replace(/\s+/g, ' ').replace(/[.,;]+$/, ''); return t.charAt(0).toUpperCase() + t.slice(1); }
+function netteTekst(t){ t = t.replace(/,?\s*\b(\d+\s*(minuutjes|minuten|minuut|min|uren|uur|u)|een kwartier|kwartier|een half uur|half uur|halfuur)\b/gi, '').trim().replace(/\s+/g, ' ').replace(/[.,;]+$/, ''); return t.charAt(0).toUpperCase() + t.slice(1); }
 
 /* ---------- navigatie ---------- */
 let stapel = [];
@@ -383,9 +397,20 @@ function startLuisteren(){
 function stopLuisteren(){ if (herkenner && luistert) { try { herkenner.stop(); } catch(e) {} } luistert = false; }
 
 /* ---------- concept voor gooi erin ---------- */
-let concept = { tekst:'', weg:{}, zone:null, kopen:null };
-function nieuwConcept(zone){ concept = { tekst:'', weg:{}, zone: zone === 'winkel' ? null : (zone || null), kopen: zone === 'winkel' ? true : null }; }
-function isKopen(){ return concept.kopen !== null ? concept.kopen : lijktKopen(concept.tekst, concept.zone || herken(concept.tekst).zone); }
+const SOORTEN = [['klus','Klus'],['snel','Even snel'],['ooit','Ooit'],['kopen','Alleen kopen']];
+const VASTE_SOORT = { winkel:'kopen', snel:'snel', ooit:'ooit' };
+let concept = { tekst:'', weg:{}, zone:null, soort:null };
+function nieuwConcept(zone){ const v = VASTE_SOORT[zone]; concept = { tekst:'', weg:{}, zone: v ? null : (zone || null), soort: v || null }; }
+function soortAuto(){
+  const t = ' ' + concept.tekst.toLowerCase() + ' ';
+  if (/\b(ooit|later eens|op termijn|volgend jaar)\b/.test(t)) return 'ooit';
+  if (lijktKopen(concept.tekst, concept.zone || herken(concept.tekst).zone)) return 'kopen';
+  const g = herken(concept.tekst).gok;
+  if (/\b(even snel|even vlug|snel even|opladen)\b/.test(t) || (g && g <= 5)) return 'snel';
+  return 'klus';
+}
+function conceptSoort(){ return concept.soort || soortAuto(); }
+function isKopen(){ return conceptSoort() === 'kopen'; }
 function conceptKlus(){
   const r = herken(concept.tekst);
   if (concept.zone) { r.zone = concept.zone; if (ZONES[r.zone]?.buiten) r.droog = true; }
@@ -432,6 +457,8 @@ function stelSetSamen(){
   if (!winkel && teKopen.length && winkelTijd <= rest) { winkel = { type:'winkel', materialen:teKopen, tijd:winkelTijd }; rest -= winkelTijd; }
   gekozen.sort((a, b) => ROUTE.indexOf(a.zone) - ROUTE.indexOf(b.zone));
   if (winkel) gekozen.unshift(Object.assign(winkel, { zone:'winkel' }));
+  const sn = snelle();
+  if (sn.length && rest >= 10) { gekozen.push({ type:'rondje', ids:sn.slice(0, 6).map(k => k.id), tijd:10, zone:null }); rest -= 10; }
   return { items:gekozen, totaal:blok - rest, rest, pastNiet };
 }
 
@@ -462,7 +489,7 @@ function zoneKnop(z, extra){
 }
 
 function tekenKaart(app){
-  const n = open().length;
+  const n = open().length + snelle().length;
   const w0 = weerDag(0), w1 = weerDag(1), w2 = weerDag(2);
   const dagen = w0 && w0.leeg ? [['Morgen', w1], ['Overmorgen', w2]] : [['Vandaag', w0], ['Morgen', w1]];
   const weer = dagen.map(([naam, w]) => w ? `<div class="${w.droog ? 'droog' : ''}">${w.droog ? ICON.zon : ICON.regen}<span><strong>${naam}</strong><br>${esc(w.tekst)}</span></div>` : `<div>${ICON.regen}<span><strong>${naam}</strong><br>geen weerbericht</span></div>`).join('');
@@ -493,6 +520,8 @@ function tekenKaart(app){
   </section>
   <div class="onder">
     <button type="button" data-doe="zone" data-z="winkel"><span class="rij">${ICON.kar}Winkelbriefje</span><strong>${briefje}</strong></button>
+    <button type="button" data-doe="zone" data-z="snel"><span class="rij">${ICON.snel}Even snel</span><strong>${snelle().length}</strong></button>
+    <button type="button" data-doe="zone" data-z="ooit"><span class="rij">${ICON.ster}Ooit</span><strong>${ooitjes().length}</strong></button>
     <button type="button" class="stip" data-doe="zone" data-z="bakje"><span>Nog te plaatsen</span><strong>${bakje}</strong></button>
   </div>
   <div class="balk"><div class="in">
@@ -502,8 +531,16 @@ function tekenKaart(app){
 }
 
 function statusRegel(k){
+  if (soortVan(k) === 'snel') return 'even snel' + (k.zone ? ' · ' + zoneNaam(k.zone) : '');
+  if (soortVan(k) === 'ooit') return 'ooit' + (k.zone ? ' · ' + zoneNaam(k.zone) : '') + ' · sinds ' + datum(k.gemaakt);
   const r = wachtReden(k);
-  return r ? r : 'kan nu · reken ' + duur(reken(k));
+  return (r ? r : 'kan nu') + ' · ' + tijdTekst(k);
+}
+function knopRij(k, kol){
+  const ooit = soortVan(k) === 'ooit';
+  return `<div class="rijklus ${kol ? 'kol' : ''}">
+    <button type="button" class="klusnaam" data-doe="ga" data-h="#klus/${k.id}"><b>${esc(k.tekst)}</b><span>${esc(statusRegel(k))}</span></button>
+    <span class="knoppen">${ooit ? `<button type="button" class="chip aan" data-doe="oppakken" data-id="${k.id}" aria-label="Nu oppakken: ${esc(k.tekst)}">Nu oppakken</button>` : `<button type="button" class="chip aan" data-doe="gedaan" data-id="${k.id}" aria-label="Gedaan: ${esc(k.tekst)}">Gedaan</button>`}<button type="button" class="chip uit" data-doe="los" data-id="${k.id}" aria-label="Laat los: ${esc(k.tekst)}">Laat los</button></span></div>`;
 }
 function klusItem(k){
   const r = wachtReden(k);
@@ -512,37 +549,46 @@ function klusItem(k){
     <span class="t"><b>${esc(k.tekst)}</b><span>${esc(statusRegel(k))}</span></span></button>`;
 }
 function tekenPaneel(z){
-  let titel, inhoud;
+  let titel, inhoud, n, eenheid = 'klus';
+  const toevoegen = (zz, tekst) => `<button type="button" class="knop licht klein" style="border:1.5px dashed #9AA39C" data-doe="gooi" data-z="${zz}">${ICON.mic}${esc(tekst)}</button>`;
   if (z === 'winkel') {
     const lijst = winkelBriefje(), keys = Object.keys(lijst), los = losseBoodschappen();
-    titel = 'Winkelbriefje';
+    titel = 'Winkelbriefje'; n = briefjeAantal(); eenheid = 'ding';
     const invoer = `<div class="rij"><input type="text" id="nieuw-boodschap" placeholder="Iets toevoegen, bv. batterijen" style="background:var(--vlak2);font-size:16px" enterkeyhint="done">
-      <button type="button" class="chip aan" data-doe="zeterop" style="flex-shrink:0">Zet erop</button></div>
-      <button type="button" class="knop licht klein" style="border:1.5px dashed #9AA39C" data-doe="gooi" data-z="winkel">${ICON.mic}Inspreken</button>`;
+      <button type="button" class="chip aan" data-doe="zeterop" style="flex-shrink:0">Zet erop</button></div>` + toevoegen('winkel', 'Inspreken');
     const losHtml = los.map(b => `<div class="item"><span class="t"><b>${esc(b.naam)}</b><span>${b.winkel ? 'bij ' + esc(b.winkel) : 'los op het briefje'}</span></span>
       <button type="button" class="chip aan" data-doe="gekochtlos" data-id="${b.id}">Gekocht</button></div>`).join('');
     const klusHtml = keys.map(m => `<div class="item"><span class="t"><b>${esc(m)}</b><span>voor: ${esc(lijst[m].map(k => k.tekst.toLowerCase()).join(', '))}</span></span>
       <button type="button" class="chip aan" data-doe="gekocht" data-m="${esc(m)}">Gekocht</button></div>`).join('');
     inhoud = invoer + (los.length || keys.length ? losHtml + klusHtml : '<p class="stil">Niets te kopen.</p>');
+  } else if (z === 'snel') {
+    const ks = snelle(); titel = 'Even snel'; n = ks.length; eenheid = 'ding';
+    inhoud = (ks.length ? `<div>${ks.map(k => knopRij(k)).join('')}</div>` : '<p class="stil">Geen kleine dingen.</p>') +
+      '<p class="stil klein" style="margin:0">Deze springen nooit vanzelf naar voren. Bij Ik heb tijd worden ze samen een klein rondje van 10 minuten.</p>' + toevoegen('snel', 'Iets kleins toevoegen');
+  } else if (z === 'ooit') {
+    const ks = ooitjes(); titel = 'Ooit'; n = ks.length; eenheid = 'ding';
+    inhoud = (ks.length ? groepeer(ks).map(([zz, kk]) => `<div class="groep" style="margin-top:4px"><div class="groepnaam">${esc(zoneNaam(zz))}</div>${kk.map(k => knopRij(k, true)).join('')}</div>`).join('') : '<p class="stil">Nog niets voor ooit.</p>') +
+      '<p class="stil klein" style="margin:0">Telt niet mee en komt nooit in een set. Bewaard, zonder druk.</p>' + toevoegen('ooit', 'Iets voor ooit toevoegen');
   } else if (z === 'bakje') {
     const ks = open().filter(k => !k.zone);
-    titel = 'Nog te plaatsen';
+    titel = 'Nog te plaatsen'; n = ks.length;
     inhoud = ks.length ? ks.map(klusItem).join('') + '<p class="stil klein">Tik op een klus en kies een plek.</p>' : '<p class="stil">Alles heeft een plek.</p>';
   } else {
-    const ks = open().filter(k => k.zone === z);
-    titel = zoneNaam(z);
+    const ks = open().filter(k => k.zone === z), oh = ooitjes().filter(k => k.zone === z);
+    titel = zoneNaam(z); n = ks.length;
     inhoud = (ks.length ? ks.map(klusItem).join('') : '<p class="stil">Hier ligt niets.</p>') +
-      `<button type="button" class="knop licht klein" style="border:1.5px dashed #9AA39C" data-doe="gooi" data-z="${z}">${ICON.mic}Iets toevoegen aan ${esc(titel)}</button>`;
+      (oh.length ? `<details style="background:var(--vlak2)"><summary>Ooit hier · ${oh.length}</summary>${oh.map(k => knopRij(k, true)).join('')}</details>` : '') +
+      toevoegen(z, 'Iets toevoegen aan ' + titel);
   }
-  const n = z === 'winkel' ? briefjeAantal() : (z === 'bakje' ? open().filter(k => !k.zone).length : open().filter(k => k.zone === z).length);
+  const woord = eenheid === 'ding' ? (n === 1 ? 'ding' : 'dingen') : (n === 1 ? 'klus' : 'klussen');
   $('#laag').innerHTML = `<div class="paneel-achter" data-doe="terug"></div>
     <div class="paneel" role="dialog" aria-label="${esc(titel)}"><div class="in"><div class="greep"></div>
-    <div class="kop" style="margin:0"><h2>${esc(titel)}</h2><span class="stil klein">${n} ${z === 'winkel' ? (n === 1 ? 'ding' : 'dingen') : (n === 1 ? 'klus' : 'klussen')}</span></div>
+    <div class="kop" style="margin:0"><h2>${esc(titel)}</h2><span class="stil klein">${n} ${woord}</span></div>
     <div class="lijst">${inhoud}</div></div></div>`;
 }
 
 function tekenGooi(app, zone){
-  if (zone === 'winkel') { if (!concept.tekst) concept.kopen = true; zone = null; }
+  if (VASTE_SOORT[zone]) { if (!concept.tekst) concept.soort = VASTE_SOORT[zone]; zone = null; }
   if (zone && !ZONES[zone]) zone = null;
   if (concept.zone !== (zone || null) && !concept.tekst) concept.zone = zone || null;
   const bakje = open().filter(k => !k.zone);
@@ -553,7 +599,7 @@ function tekenGooi(app, zone){
     <div id="luister"></div>
     <div class="stack" style="gap:6px"><label class="label" for="vang">Wat zit er in je hoofd?</label>
       <textarea id="vang" data-in="tekst" placeholder="bv. tuinhuis, deur hangt scheef, scharnieren kapot">${esc(concept.tekst)}</textarea></div>
-    <div class="stack" style="gap:8px"><div class="label">Wat ik erop lees</div><div id="chips" class="chips"></div>
+    <div class="stack" style="gap:8px"><div class="label">Wat ik erop lees</div><div id="chips" class="stack" style="gap:10px"></div>
       <div class="stil klein">Klopt iets niet? Tik op het kruisje. Je hoeft niets in te vullen.</div></div>
     <button type="button" class="knop hoofd" data-doe="bewaar">Bewaar</button>
     ${bakje.length ? `<div class="kaartje"><div class="label">Nog te plaatsen · ${bakje.length}</div><div class="lijst" style="margin-top:8px">${bakje.map(klusItem).join('')}</div></div>` : ''}
@@ -568,44 +614,47 @@ function tekenLuister(){
 }
 function tekenChips(){
   const el = $('#chips'); if (!el) return;
-  const r = conceptKlus(), c = [];
-  const kopen = isKopen();
-  const soort = `<button type="button" class="chip ${kopen ? 'aan' : 'uit'}" aria-pressed="${kopen}" data-doe="soort">${ICON.kar}Alleen kopen</button>`;
-  if (kopen) {
+  const soort = conceptSoort();
+  const rij = `<div class="soorten" role="group" aria-label="Soort">${SOORTEN.map(([sl, t]) => `<button type="button" class="chip ${soort === sl ? 'aan' : 'uit'}" aria-pressed="${soort === sl}" data-doe="kiessoort" data-s="${sl}">${sl === 'kopen' ? ICON.kar : sl === 'snel' ? ICON.snel : sl === 'ooit' ? ICON.ster : ''}${t}</button>`).join('')}</div>`;
+  let det = '';
+  if (soort === 'kopen') {
     const items = koopItems(concept.tekst), w = welkeWinkel(concept.tekst);
-    el.innerHTML = soort + items.map(i => `<span class="chip">${esc(i)}</span>`).join('') + (w ? `<span class="chip uit">bij ${esc(w)}</span>` : '');
-    return;
+    det = items.map(i => `<span class="chip">${esc(i)}</span>`).join('') + (w ? `<span class="chip uit">bij ${esc(w)}</span>` : '');
+  } else {
+    const r = conceptKlus(), c = [];
+    if (r.zone) c.push(['zone', esc(zoneNaam(r.zone)), '']);
+    else if (soort !== 'snel') c.push(['', 'nog geen plek', 'uit']);
+    if (soort === 'klus') {
+      if (r.materiaal) c.push(['materiaal', ICON.kar + esc(r.materiaal), '']);
+      if (r.droog) c.push(['droog', 'droog weer', 'zon']);
+      if (r.ayke) c.push(['ayke', 'Ayke thuis', '']);
+      if (r.weekend) c.push(['weekend', 'weekend', '']);
+      c.push(['', 'jij ' + gokTekst(r.gok || 5), 'uit']);
+    }
+    det = c.map(([k, t, cls]) => k ? `<button type="button" class="chip ${cls}" data-doe="weg" data-k="${k}" aria-label="${k} verwijderen">${t} <span aria-hidden="true">×</span></button>` : `<span class="chip ${cls}">${t}</span>`).join('');
   }
-  if (r.zone) c.push(['zone', esc(zoneNaam(r.zone)), '']);
-  else c.push(['', 'nog geen plek', 'uit']);
-  if (r.materiaal) c.push(['materiaal', ICON.kar + esc(r.materiaal), '']);
-  if (r.droog) c.push(['droog', 'droog weer', 'zon']);
-  if (r.ayke) c.push(['ayke', 'Ayke thuis', '']);
-  if (r.weekend) c.push(['weekend', 'weekend', '']);
-  if (r.gok) c.push(['', 'gok ' + duur(r.gok), 'uit']);
-  el.innerHTML = soort + c.map(([k, t, cls]) => k ? `<button type="button" class="chip ${cls}" data-doe="weg" data-k="${k}" aria-label="${k} verwijderen">${t} <span aria-hidden="true">×</span></button>` : `<span class="chip ${cls}">${t}</span>`).join('');
+  el.innerHTML = rij + (det ? `<div class="chips">${det}</div>` : '');
 }
 
 function tekenKlus(app, id){
   const k = vind(id);
   if (!k) { vervang('#kaart'); return; }
+  const soort = soortVan(k);
   const andere = open().filter(o => o.id !== k.id);
   const opties = ['<option value="">Nog geen plek</option>'].concat(Object.keys(ZONES).map(z => `<option value="${z}" ${k.zone === z ? 'selected' : ''}>${esc(ZONES[z].naam)}</option>`)).join('');
-  const toggle = (veld, tekst, zon) => `<button type="button" class="chip ${k[veld] ? 'aan' : 'uit'} ${zon && k[veld] ? 'zon' : ''}" aria-pressed="${k[veld]}" data-doe="toggle" data-v="${veld}">${tekst}</button>`;
+  const toggle = (veld, tekst, zon) => `<button type="button" class="chip ${k[veld] ? 'aan' : 'uit'} ${zon && k[veld] ? 'zon' : ''}" aria-pressed="${!!k[veld]}" data-doe="toggle" data-v="${veld}">${tekst}</button>`;
   const status = k.status === 'open' ? statusRegel(k) : (k.status === 'gedaan' ? 'gedaan op ' + datum(k.afgerond) : 'losgelaten op ' + datum(k.afgerond));
-  app.innerHTML = `
-  <button type="button" class="terug" data-doe="terug">${ICON.terug}${esc(zoneNaam(k.zone))}</button>
-  <div class="stack">
-    <div class="stack" style="gap:6px"><label class="label" for="f-tekst">Klus</label>
-      <textarea id="f-tekst" data-in="f-tekst" rows="2" style="min-height:0;font-family:var(--titel);font-weight:700;font-size:21px;line-height:1.25">${esc(k.tekst)}</textarea></div>
-    <div class="stil klein" style="margin-top:-6px">${esc(status)}</div>
+  const soortRij = `<div class="soorten" role="group" aria-label="Soort">${SOORTEN.filter(([sl]) => sl !== 'kopen').map(([sl, t]) => `<button type="button" class="chip ${soort === sl ? 'aan' : 'uit'}" aria-pressed="${soort === sl}" data-doe="fichesoort" data-s="${sl}">${t}</button>`).join('')}</div>`;
+  const plek = `<div class="kaartje" style="margin:0"><label class="label" for="f-zone">Plek</label>
+        <select id="f-zone" data-in="f-zone" style="margin-top:6px;background:var(--vlak2);font-size:15px;padding:10px">${opties}</select></div>`;
+  const klusDelen = soort !== 'klus' ? plek : `
     <div class="g3" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
-      <div class="kaartje" style="margin:0"><label class="label" for="f-zone">Plek</label>
-        <select id="f-zone" data-in="f-zone" style="margin-top:6px;background:var(--vlak2);font-size:15px;padding:10px">${opties}</select></div>
-      <div class="kaartje" style="margin:0"><label class="label" for="f-gok">Jouw gok</label>
-        <div class="rij" style="margin-top:6px"><input id="f-gok" inputmode="numeric" data-in="f-gok" value="${k.gok}" style="width:70px;background:var(--vlak2);font-size:15px;padding:10px;text-align:center"><span>min</span></div>
-        <div class="stil klein" style="margin-top:4px" id="f-reken">reken ${duur(reken(k))}</div></div>
+      ${plek}
+      <div class="kaartje" style="margin:0"><label class="label" for="f-gok">Jouw tijd</label>
+        <div class="rij" style="margin-top:6px"><input id="f-gok" inputmode="numeric" data-in="f-gok" value="${k.gok || 5}" style="width:70px;background:var(--vlak2);font-size:15px;padding:10px;text-align:center"><span>min</span></div>
+        <div class="stil klein" style="margin-top:4px" id="f-reken">${esc(k.vast ? 'de app rekent met jouw tijd' : 'gerekend ' + duur(reken(k)))}</div></div>
     </div>
+    <div class="chips">${toggle('vast', 'Mijn tijd klopt')}<span class="stil klein" style="align-self:center">Aan: geen factor, de app rekent met jouw tijd (minstens 10 min).</span></div>
     <div class="kaartje" style="margin:0"><div class="label">Kan pas als</div>
       <div class="chips" style="margin-top:8px">${toggle('droog', 'droog weer', true)}${toggle('ayke', 'Ayke thuis')}${toggle('weekend', 'weekend')}</div></div>
     <div class="kaartje" style="margin:0"><label class="label" for="f-mat">Nodig uit de winkel</label>
@@ -613,12 +662,21 @@ function tekenKlus(app, id){
       ${k.materiaal ? `<label class="rij" style="margin-top:8px;min-height:40px"><input type="checkbox" data-in="f-inhuis" ${k.inHuis ? 'checked' : ''} style="width:22px;height:22px;accent-color:var(--mos)"> in huis</label>` : ''}</div>
     <details ${k.wachtOp ? 'open' : ''}><summary>Meer</summary>
       <label class="label" for="f-wacht" style="display:block;margin-top:10px">Wacht op een andere klus</label>
-      <select id="f-wacht" data-in="f-wacht" style="margin-top:6px;background:var(--vlak2);font-size:15px;padding:10px"><option value="">Nee</option>${andere.map(o => `<option value="${o.id}" ${k.wachtOp === o.id ? 'selected' : ''}>${esc(o.tekst)}</option>`).join('')}</select>
-      <div class="stil klein" style="margin-top:10px">Erin gegooid op ${datum(k.gemaakt)}.</div></details>
-    ${k.status === 'open' ? `<button type="button" class="knop hoofd klein" data-doe="gedaan" data-id="${k.id}">Gedaan</button>
-    <button type="button" class="knop rand klein" data-doe="los" data-id="${k.id}">Laat los</button>
-    <div class="stil klein" style="text-align:center">Geen bevestiging nodig: je kunt het 5 seconden ongedaan maken.</div>` :
-    `<button type="button" class="knop rand klein" data-doe="heropen" data-id="${k.id}">Toch nog niet klaar</button>`}
+      <select id="f-wacht" data-in="f-wacht" style="margin-top:6px;background:var(--vlak2);font-size:15px;padding:10px"><option value="">Nee</option>${andere.map(o => `<option value="${o.id}" ${k.wachtOp === o.id ? 'selected' : ''}>${esc(o.tekst)}</option>`).join('')}</select></details>`;
+  const knoppen = k.status !== 'open' ? `<button type="button" class="knop rand klein" data-doe="heropen" data-id="${k.id}">Toch nog niet klaar</button>` :
+    (soort === 'ooit' ? `<button type="button" class="knop hoofd klein" data-doe="oppakken" data-id="${k.id}">Nu oppakken</button>` : `<button type="button" class="knop hoofd klein" data-doe="gedaan" data-id="${k.id}">Gedaan</button>`) +
+    `<button type="button" class="knop rand klein" data-doe="los" data-id="${k.id}">Laat los</button>
+    <div class="stil klein" style="text-align:center">Geen bevestiging nodig: je kunt het 5 seconden ongedaan maken.</div>`;
+  app.innerHTML = `
+  <button type="button" class="terug" data-doe="terug">${ICON.terug}Terug</button>
+  <div class="stack">
+    <div class="stack" style="gap:6px"><label class="label" for="f-tekst">${soort === 'ooit' ? 'Ooit' : soort === 'snel' ? 'Even snel' : 'Klus'}</label>
+      <textarea id="f-tekst" data-in="f-tekst" rows="2" style="min-height:0;font-family:var(--titel);font-weight:700;font-size:21px;line-height:1.25">${esc(k.tekst)}</textarea></div>
+    <div class="stil klein" style="margin-top:-6px">${esc(status)}</div>
+    ${soortRij}
+    ${klusDelen}
+    <div class="stil klein">Erin gegooid op ${datum(k.gemaakt)}.</div>
+    ${knoppen}
   </div>`;
 }
 
@@ -627,9 +685,10 @@ function tekenTijd(app){
   const dn = droogNu();
   const regel = dn === true ? `<div class="zonregel droog">${ICON.zon}Nu droog. Buitenklussen gaan voor.</div>` : dn === false ? `<div class="zonregel">${ICON.regen}Het regent of gaat regenen. Buitenklussen wachten.</div>` : `<div class="zonregel">${ICON.regen}Geen weerbericht. Kijk zelf even naar buiten.</div>`;
   const items = sel.items.map((it, i) => {
-    if (it.type === 'winkel') return `<div class="r"><span class="nr">${i+1}</span><div><b>Winkelronde</b><span>${esc(it.materialen.join(', '))} · reken ${duur(it.tijd)}</span></div></div>`;
+    if (it.type === 'winkel') return `<div class="r"><span class="nr">${i+1}</span><div><b>Winkelronde</b><span>${esc(it.materialen.join(', '))} · gerekend ${duur(it.tijd)}</span></div></div>`;
+    if (it.type === 'rondje') return `<div class="r"><span class="nr">${i+1}</span><div><b>Klein rondje</b><span>${it.ids.length} kleine ${it.ids.length === 1 ? 'ding' : 'dingen'} · 10 min</span></div></div>`;
     const k = vind(it.id);
-    return `<div class="r"><span class="nr">${i+1}</span><div><b>${esc(k.tekst)}</b><span>${esc(zoneNaam(k.zone))} · reken ${duur(it.tijd)}</span></div></div>`;
+    return `<div class="r"><span class="nr">${i+1}</span><div><b>${esc(k.tekst)}</b><span>${esc(zoneNaam(k.zone))} · ${esc(tijdTekst(k))}</span></div></div>`;
   }).join('');
   const past = sel.pastNiet.slice(0, 4).map(p => `${esc(p.tekst)}: ${esc(p.reden)}`).join('<br>');
   app.innerHTML = `
@@ -651,8 +710,9 @@ function tekenTijd(app){
 
 function huidigItem(){ const s = S.set; return s && s.items[s.i]; }
 function verstreken(){ const s = S.set; if (!s) return 0; const eind = s.pauze || nu(); return Math.max(0, Math.round((eind - s.itemStart - s.pauzeTotaal) / 60000)); }
-function itemNaam(it){ return it.type === 'winkel' ? 'Winkelronde' : (vind(it.id)?.tekst || 'Klus'); }
-function itemZone(it){ return it.type === 'winkel' ? 'Winkel: ' + it.materialen.join(', ') : zoneNaam(vind(it.id)?.zone); }
+function itemNaam(it){ return it.type === 'winkel' ? 'Winkelronde' : it.type === 'rondje' ? 'Klein rondje' : (vind(it.id)?.tekst || 'Klus'); }
+function itemZone(it){ return it.type === 'winkel' ? 'Winkel: ' + it.materialen.join(', ') : it.type === 'rondje' ? 'Even snel' : zoneNaam(vind(it.id)?.zone); }
+function itemTijd(it){ const k = it.type === 'klus' && vind(it.id); return k ? tijdTekst(k) : 'gerekend ' + duur(it.tijd); }
 
 function tekenSet(app){
   const s = S.set, it = huidigItem();
@@ -665,7 +725,8 @@ function tekenSet(app){
   <div class="stack" style="margin-top:28px">
     <div class="label" style="color:var(--stil2)">${esc(itemZone(it))}</div>
     <h1 class="groot">${esc(itemNaam(it))}</h1>
-    <div class="klok"><b id="minuten">${verstreken()} min</b><span class="stil">${s.pauze ? 'gepauzeerd' : 'bezig'} · gerekend op ${duur(it.tijd)}</span></div>
+    <div class="klok"><b id="minuten">${verstreken()} min</b><span class="stil">${s.pauze ? 'gepauzeerd' : 'bezig'} · ${esc(itemTijd(it))}</span></div>
+    ${it.type === 'rondje' ? `<div class="kaartje" style="margin:0"><div class="lijst">${it.ids.map(id => { const k = vind(id); if (!k) return ''; const ok = k.status === 'gedaan'; return `<button type="button" class="item" data-doe="vinkrondje" data-id="${id}" aria-pressed="${ok}"><span class="st ${ok ? 'kan' : 'wacht'}">${ok ? ICON.vinkje : ''}</span><span class="t"><b style="${ok ? 'text-decoration:line-through;color:var(--stil)' : ''}">${esc(k.tekst)}</b></span></button>`; }).join('')}</div></div>` : ''}
     ${om ? '<div class="zonregel">Je blok is om. Rond deze af en stop dan gerust.</div>' : ''}
     ${volgende ? `<div class="rij klein" style="color:var(--stil2)">${ICON.pijl}Hierna: ${esc(itemNaam(volgende))}</div>` : '<div class="klein" style="color:var(--stil2)">Dit is de laatste van de set.</div>'}
     <button type="button" class="knop hoofd" style="min-height:64px;font-size:19px" data-doe="klaar">${ICON.vink}Klaar</button>
@@ -701,7 +762,7 @@ function tekenKlaar(app){
 }
 
 function tekenOverzicht(app){
-  const os = open();
+  const os = open(), sn = snelle(), oo = ooitjes();
   const maand = new Date(); maand.setDate(1); maand.setHours(0,0,0,0);
   const gedaan = S.klussen.filter(k => k.status === 'gedaan' && k.afgerond >= maand.getTime());
   const los = S.klussen.filter(k => k.status === 'los' && k.afgerond >= maand.getTime());
@@ -713,14 +774,14 @@ function tekenOverzicht(app){
   <button type="button" class="terug" data-doe="terug">${ICON.terug}Kaart</button>
   <div class="stack">
     <h1>Overzicht</h1>
-    <div class="cijfers"><div><b>${os.length}</b><span>in bewaring</span></div><div><b>${gedaan.length}</b><span>gedaan deze maand</span></div><div><b>${los.length}</b><span>losgelaten deze maand</span></div></div>
+    <div class="cijfers"><div><b>${os.length + sn.length}</b><span>in bewaring</span></div><div><b>${gedaan.length}</b><span>gedaan deze maand</span></div><div><b>${los.length}</b><span>losgelaten deze maand</span></div></div>
     <div class="kaartje" style="margin:0"><div class="label">Jouw tijdsfactor</div>
       <p style="margin:6px 0 0">${S.antwoorden.length >= 3 ? `Je klussen duren ongeveer <strong>${factor} keer</strong> zo lang als je gok.` : `De app rekent nu met <strong>${factor} keer</strong> je gok. Na een paar klussen weet ze het beter.`}</p></div>
     <div class="kaartje" style="margin:0"><div class="label">Alles in bewaring</div>
-      ${os.length ? groepen.map(([z, ks]) => `<div class="groep"><div class="groepnaam">${esc(zoneNaam(z))}</div>${ks.map(k => `<div class="rijklus">
-        <button type="button" class="klusnaam" data-doe="ga" data-h="#klus/${k.id}"><b>${esc(k.tekst)}</b><span>${esc(statusRegel(k))}</span></button>
-        <span class="knoppen"><button type="button" class="chip aan" data-doe="gedaan" data-id="${k.id}" aria-label="Gedaan: ${esc(k.tekst)}">Gedaan</button><button type="button" class="chip uit" data-doe="los" data-id="${k.id}" aria-label="Laat los: ${esc(k.tekst)}">Laat los</button></span></div>`).join('')}</div>`).join('') : '<p class="stil" style="margin:8px 0 0">Niets in bewaring. Hoofd leeg.</p>'}
+      ${os.length || sn.length ? groepen.map(([z, ks]) => `<div class="groep"><div class="groepnaam">${esc(zoneNaam(z))}</div>${ks.map(k => knopRij(k)).join('')}</div>`).join('') +
+        (sn.length ? `<div class="groep"><div class="groepnaam">Even snel</div>${sn.map(k => knopRij(k)).join('')}</div>` : '') : '<p class="stil" style="margin:8px 0 0">Niets in bewaring. Hoofd leeg.</p>'}
     </div>
+    ${oo.length ? `<details><summary>Ooit · ${oo.length}</summary>${groepeer(oo).map(([z, ks]) => `<div class="groep"><div class="groepnaam">${esc(zoneNaam(z))}</div>${ks.map(k => knopRij(k, true)).join('')}</div>`).join('')}</details>` : ''}
     ${recent.length ? `<div class="kaartje" style="margin:0"><div class="label">Onlangs</div><div class="lijst" style="margin-top:8px">${recent.map(k => `<button type="button" class="item" data-doe="ga" data-h="#klus/${k.id}"><span class="t"><b>${esc(k.tekst)}</b><span>${k.status === 'gedaan' ? 'gedaan' : 'losgelaten'} op ${datum(k.afgerond)}</span></span></button>`).join('')}</div></div>` : ''}
     <div class="kaartje stack" style="margin:0"><div class="label">Back-up</div>
       <span class="klein" style="color:var(--stil2)">${S.laatsteBackup ? 'Laatste back-up: ' + datum(S.laatsteBackup) + '.' : 'Nog geen back-up gemaakt.'} Alles staat alleen op deze telefoon.</span>
@@ -743,7 +804,8 @@ const DOE = {
     stopLuisteren();
     concept.tekst = $('#vang').value;
     if (!concept.tekst.trim()) { toast('Er staat nog niets. Spreek in of typ iets.'); return; }
-    if (isKopen()) {
+    const soort = conceptSoort();
+    if (soort === 'kopen') {
       const items = koopItems(concept.tekst), w = welkeWinkel(concept.tekst);
       if (!items.length) { toast('Ik hoorde niets om te kopen.'); return; }
       const terug2 = momentopname();
@@ -753,9 +815,10 @@ const DOE = {
       terug(); return;
     }
     const r = conceptKlus(), terugzet = momentopname();
-    const k = { id:nieuwId(), tekst:netteTekst(concept.tekst), zone:r.zone, droog:!!r.droog, ayke:r.ayke, weekend:r.weekend, materiaal:r.materiaal, inHuis:false, wachtOp:null, gok:r.gok || 30, status:'open', gemaakt:nu(), afgerond:null };
+    const tekstIn = soort === 'ooit' ? concept.tekst.replace(/^\s*(ik wil |ik moet )?(ooit|later eens|op termijn)( nog| eens)?[\s,]*/i, '') : concept.tekst;
+    const k = { id:nieuwId(), soort, tekst:netteTekst(tekstIn || concept.tekst), zone:r.zone, droog:!!r.droog, ayke:r.ayke, weekend:r.weekend, materiaal: soort === 'snel' ? '' : r.materiaal, inHuis:false, wachtOp:null, vast:false, gok:r.gok || 5, status:'open', gemaakt:nu(), afgerond:null };
     S.klussen.push(k); bewaar(); nieuwConcept();
-    toast(k.zone ? 'Bewaard bij ' + zoneNaam(k.zone) : 'Bewaard bij Nog te plaatsen', terugzet);
+    toast(soort === 'snel' ? 'Bewaard bij Even snel' : soort === 'ooit' ? 'Bewaard bij Ooit' + (k.zone ? ' · ' + zoneNaam(k.zone) : '') : (k.zone ? 'Bewaard bij ' + zoneNaam(k.zone) : 'Bewaard bij Nog te plaatsen'), terugzet);
     terug();
   },
   toggle: d => { const k = vind(route()[1]); k[d.v] = !k[d.v]; bewaar(); teken(); },
@@ -763,7 +826,10 @@ const DOE = {
   los: d => { const terugzet = momentopname(); const k = vind(d.id); k.status = 'los'; k.afgerond = nu(); bewaar(); toast('Losgelaten: ' + k.tekst, terugzet); if (route()[0] === 'klus') terug(); else teken(); },
   heropen: d => { const k = vind(d.id); k.status = 'open'; k.afgerond = null; bewaar(); teken(); },
   gekocht: d => { const terugzet = momentopname(); open().forEach(k => { if (k.materiaal && k.materiaal.toLowerCase() === d.m) k.inHuis = true; }); bewaar(); toast('Gekocht: ' + d.m, terugzet); teken(); },
-  soort: () => { concept.tekst = $('#vang')?.value || concept.tekst; concept.kopen = !isKopen(); tekenChips(); },
+  kiessoort: d => { const v = $('#vang'); if (v) concept.tekst = v.value; concept.soort = d.s; tekenChips(); },
+  fichesoort: d => { const k = vind(route()[1]); if (!k) return; k.soort = d.s; bewaar(); teken(); },
+  oppakken: d => { const terugzet = momentopname(); const k = vind(d.id); k.soort = 'klus'; bewaar(); toast('Opgepakt: staat nu bij je klussen', terugzet); teken(); },
+  vinkrondje: d => { const k = vind(d.id); if (!k) return; if (k.status === 'gedaan') { k.status = 'open'; k.afgerond = null; } else { k.status = 'gedaan'; k.afgerond = nu(); } bewaar(); teken(); },
   gekochtlos: d => { const terugzet = momentopname(); const b = S.boodschappen.find(x => x.id === d.id); if (b) { b.gekocht = nu(); bewaar(); toast('Gekocht: ' + b.naam, terugzet); } teken(); },
   zeterop: () => { const v = $('#nieuw-boodschap'); const items = koopItems(v.value); if (!items.length) { v.focus(); return; } const w = welkeWinkel(v.value), terugzet = momentopname(); items.forEach(i => S.boodschappen.push({ id:nieuwId(), naam:i, winkel:w, gekocht:false, gemaakt:nu() })); bewaar(); toast('Op het winkelbriefje: ' + items.join(', '), terugzet); teken(); setTimeout(() => $('#nieuw-boodschap')?.focus(), 30); },
   blok: d => { S.blok = Number(d.m); setVariant = 0; bewaar(); teken(); },
@@ -776,6 +842,7 @@ const DOE = {
   klaar: () => {
     const s = S.set, it = huidigItem(); if (!it) return;
     if (s.pauze) { s.pauzeTotaal += nu() - s.pauze; s.pauze = null; }
+    if (it.type === 'rondje') { const n = it.ids.filter(id => vind(id)?.status === 'gedaan').length; toast(n + (n === 1 ? ' klein ding' : ' kleine dingen') + ' gedaan'); return DOE.antwoord({ a:'' }); }
     if (it.type === 'winkel') { it.gekocht = []; it.losGekocht = []; open().forEach(k => { if (k.materiaal && !k.inHuis && it.materialen.includes(k.materiaal.toLowerCase())) { k.inHuis = true; it.gekocht.push(k.id); } }); losseBoodschappen().forEach(b => { if (it.materialen.includes(b.naam.toLowerCase())) { b.gekocht = nu(); it.losGekocht.push(b.id); } }); }
     else { const k = vind(it.id); if (k) { k.status = 'gedaan'; k.afgerond = nu(); } }
     s.vraag = true; bewaar(); vervang('#klaar');
@@ -787,8 +854,9 @@ const DOE = {
     s.vraag = false; bewaar(); vervang('#set');
   },
   antwoord: d => {
-    const s = S.set;
-    if (d.a) { const f = { sneller:0.9, ongeveer:1, langer:1.15 }[d.a]; S.factor = Math.min(6, Math.max(1, S.factor * f)); S.antwoorden.push({ a:d.a, t:nu() }); }
+    const s = S.set, huidig = s.items[s.i];
+    const vastK = huidig && huidig.type === 'klus' && vind(huidig.id)?.vast;
+    if (d.a && !vastK) { const f = { sneller:0.9, ongeveer:1, langer:1.15 }[d.a]; S.factor = Math.min(6, Math.max(1, S.factor * f)); S.antwoorden.push({ a:d.a, t:nu() }); }
     s.vraag = false; s.i++; s.itemStart = nu(); s.pauzeTotaal = 0; s.pauze = null;
     if (s.i >= s.items.length) { S.set = null; bewaar(); toast('Set klaar. Goed gedaan.'); vervang('#kaart'); return; }
     bewaar(); vervang('#set');
@@ -814,7 +882,7 @@ document.addEventListener('input', e => {
   if (v === 'tekst') { concept.tekst = t.value; tekenChips(); return; }
   const k = vind(route()[1]);
   if (v === 'f-tekst' && k) { k.tekst = t.value; bewaar(); }
-  if (v === 'f-gok' && k) { const n = parseInt(t.value, 10); if (n > 0) { k.gok = n; bewaar(); const el = $('#f-reken'); if (el) el.textContent = 'reken ' + duur(reken(k)); } }
+  if (v === 'f-gok' && k) { const n = parseInt(t.value, 10); if (n > 0) { k.gok = n; bewaar(); const el = $('#f-reken'); if (el) el.textContent = k.vast ? 'de app rekent met jouw tijd' : 'gerekend ' + duur(reken(k)); } }
 });
 document.addEventListener('change', e => {
   const t = e.target, v = t.dataset.in;
